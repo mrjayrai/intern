@@ -1,94 +1,265 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { api } from '../lib/api';
+import { Skeleton } from '../components/ui/skeleton';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+import { api, type ApiRecord } from '../lib/api';
+import {
+  AlertTriangle,
   Award,
-  Search,
-  Download,
-  Send,
   CheckCircle,
   Clock,
+  Download,
   FileText,
-  User
+  Plus,
+  RefreshCcw,
+  Search,
+  Send,
+  User,
+  XCircle,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+
+type CertificateStatus = 'issued' | 'pending_approval' | 'in_progress' | 'revoked' | 'draft';
 
 type CertificateRecord = {
   id?: string;
   _id?: string;
   candidateName?: string;
+  candidateEmail?: string;
   department?: string;
   internshipPeriod?: string;
-  status?: string;
+  completionDate?: string | null;
+  issueDate?: string | null;
+  status?: CertificateStatus | string;
   certificateNumber?: string | null;
   mentor?: string;
+  mentorName?: string;
+  mentorEmail?: string;
   mentorApproved?: boolean;
+  pdfUrl?: string;
+  downloadUrl?: string;
+  certificateUrl?: string;
 };
 
-const statusConfig = {
-  issued: { label: 'Issued', variant: 'success' as const, icon: CheckCircle },
-  pending_approval: { label: 'Pending Approval', variant: 'warning' as const, icon: Clock },
-  in_progress: { label: 'In Progress', variant: 'info' as const, icon: Clock },
+type IssueCertificateForm = {
+  candidateName: string;
+  candidateEmail: string;
+  department: string;
+  mentorName: string;
+  mentorEmail: string;
+  internshipPeriod: string;
+  completionDate: string;
 };
+
+const initialIssueForm: IssueCertificateForm = {
+  candidateName: '',
+  candidateEmail: '',
+  department: '',
+  mentorName: '',
+  mentorEmail: '',
+  internshipPeriod: '',
+  completionDate: '',
+};
+
+const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'info' | 'error' | 'default'; icon: typeof Clock }> = {
+  issued: { label: 'Issued', variant: 'success', icon: CheckCircle },
+  pending_approval: { label: 'Pending Approval', variant: 'warning', icon: Clock },
+  in_progress: { label: 'In Progress', variant: 'info', icon: Clock },
+  draft: { label: 'Draft', variant: 'default', icon: FileText },
+  revoked: { label: 'Revoked', variant: 'error', icon: XCircle },
+};
+
+function getCertificateId(cert: CertificateRecord) {
+  return cert.id || cert._id || cert.certificateNumber || cert.candidateEmail || cert.candidateName || 'certificate';
+}
+
+function getStatusInfo(status?: string) {
+  return statusConfig[status || 'in_progress'] || statusConfig.in_progress;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function getDownloadUrl(cert: CertificateRecord) {
+  return cert.pdfUrl || cert.downloadUrl || cert.certificateUrl || '';
+}
+
+function CertificatesSkeleton() {
+  return (
+    <div className="space-y-6 p-4 md:p-6 xl:p-8">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <Skeleton className="h-10 w-40" />
+      </div>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {[1, 2, 3, 4].map((item) => (
+          <Skeleton key={item} className="h-28 rounded-lg" />
+        ))}
+      </div>
+      <Skeleton className="h-96 rounded-lg" />
+    </div>
+  );
+}
 
 export function Certificates() {
   const [searchTerm, setSearchTerm] = useState('');
   const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
-  const [statusMessage, setStatusMessage] = useState('Loading certificates...');
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isIssueOpen, setIsIssueOpen] = useState(false);
+  const [issueForm, setIssueForm] = useState<IssueCertificateForm>(initialIssueForm);
+  const [issueError, setIssueError] = useState('');
+  const [isIssuing, setIsIssuing] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadCertificates = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage('');
 
-    api.certificates()
-      .then((data) => {
-        if (!isMounted) return;
-        setCertificates(data);
-        setStatusMessage(data.length ? 'Synced with backend' : 'No certificates found');
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setCertificates([]);
-        setStatusMessage(err instanceof Error ? err.message : 'Unable to load certificates');
-      });
-
-    return () => {
-      isMounted = false;
-    };
+    try {
+      const data = await api.certificates<CertificateRecord[]>();
+      setCertificates(data);
+    } catch (err) {
+      setCertificates([]);
+      setErrorMessage(err instanceof Error ? err.message : 'Unable to load certificates');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const visibleCertificates = certificates.filter((cert) => {
+  useEffect(() => {
+    loadCertificates();
+  }, [loadCertificates]);
+
+  const visibleCertificates = useMemo(() => {
     const query = searchTerm.toLowerCase();
-    return [cert.candidateName, cert.department, cert.mentor, cert.certificateNumber]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(query));
-  });
+    return certificates.filter((cert) => (
+      [
+        cert.candidateName,
+        cert.candidateEmail,
+        cert.department,
+        cert.mentor,
+        cert.mentorName,
+        cert.mentorEmail,
+        cert.certificateNumber,
+        cert.status,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    ));
+  }, [certificates, searchTerm]);
 
   const issuedCount = certificates.filter((cert) => cert.status === 'issued').length;
   const pendingCount = certificates.filter((cert) => cert.status === 'pending_approval').length;
+  const downloadableCount = certificates.filter((cert) => Boolean(getDownloadUrl(cert))).length;
+  const completedCount = certificates.filter((cert) => cert.completionDate).length;
+
+  const updateIssueForm = (field: keyof IssueCertificateForm, value: string) => {
+    setIssueForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleDownload = (cert: CertificateRecord) => {
+    const url = getDownloadUrl(cert);
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleIssueCertificate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIssueError('');
+
+    if (!issueForm.candidateName.trim() || !issueForm.department.trim() || !issueForm.completionDate) {
+      setIssueError('Candidate name, department, and completion date are required.');
+      return;
+    }
+
+    setIsIssuing(true);
+
+    try {
+      const payload: ApiRecord = {
+        candidateName: issueForm.candidateName.trim(),
+        candidateEmail: issueForm.candidateEmail.trim() || undefined,
+        department: issueForm.department.trim(),
+        mentorName: issueForm.mentorName.trim() || undefined,
+        mentorEmail: issueForm.mentorEmail.trim() || undefined,
+        internshipPeriod: issueForm.internshipPeriod.trim() || undefined,
+        completionDate: issueForm.completionDate,
+      };
+
+      await api.issueCertificate(payload);
+      await loadCertificates();
+      setIssueForm(initialIssueForm);
+      setIsIssueOpen(false);
+    } catch (err) {
+      setIssueError(err instanceof Error ? err.message : 'Unable to issue certificate');
+    } finally {
+      setIsIssuing(false);
+    }
+  };
+
+  if (isLoading) {
+    return <CertificatesSkeleton />;
+  }
 
   return (
-    <div className="space-y-6 p-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-4 md:p-6 xl:p-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Certificate Management</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Generate and issue internship completion certificates. {statusMessage}
+            Issue, track, and download internship completion certificates.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline">Preview Template</Button>
-          <Button variant="primary">Generate Certificate</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" className="gap-2" onClick={loadCertificates}>
+            <RefreshCcw className="h-4 w-4" />
+            Retry
+          </Button>
+          <Button variant="primary" className="gap-2" onClick={() => setIsIssueOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Issue Certificate
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+      {errorMessage && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-red-600" />
+              <div>
+                <p className="font-medium text-red-900">Certificates could not be loaded</p>
+                <p className="text-sm text-red-700">{errorMessage}</p>
+              </div>
+            </div>
+            <Button variant="outline" onClick={loadCertificates}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Issued</p>
+                <p className="text-sm text-muted-foreground">Issued</p>
                 <p className="mt-1 text-2xl font-bold">{issuedCount}</p>
               </div>
               <Award className="h-8 w-8 text-blue-500" />
@@ -110,10 +281,10 @@ export function Certificates() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">This Month</p>
-                <p className="mt-1 text-2xl font-bold text-emerald-600">{issuedCount}</p>
+                <p className="text-sm text-muted-foreground">Download Ready</p>
+                <p className="mt-1 text-2xl font-bold text-emerald-600">{downloadableCount}</p>
               </div>
-              <CheckCircle className="h-8 w-8 text-emerald-500" />
+              <Download className="h-8 w-8 text-emerald-500" />
             </div>
           </CardContent>
         </Card>
@@ -121,10 +292,10 @@ export function Certificates() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Avg Processing</p>
-                <p className="mt-1 text-2xl font-bold">-</p>
+                <p className="text-sm text-muted-foreground">Completed Internships</p>
+                <p className="mt-1 text-2xl font-bold text-purple-600">{completedCount}</p>
               </div>
-              <FileText className="h-8 w-8 text-purple-500" />
+              <CheckCircle className="h-8 w-8 text-purple-500" />
             </div>
           </CardContent>
         </Card>
@@ -132,158 +303,185 @@ export function Certificates() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>All Certificates</CardTitle>
-            <div className="relative">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <CardTitle>Issued Certificates</CardTitle>
+            <div className="relative w-full md:w-80">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search certificates..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-64 pl-10"
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="pl-10"
               />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border text-left text-sm font-medium text-muted-foreground">
-                  <th className="pb-3">Candidate</th>
-                  <th className="pb-3">Department</th>
-                  <th className="pb-3">Internship Period</th>
-                  <th className="pb-3">Status</th>
-                  <th className="pb-3">Certificate #</th>
-                  <th className="pb-3">Mentor Approval</th>
-                  <th className="pb-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {visibleCertificates.map((cert) => {
-                  const statusInfo = statusConfig[cert.status as keyof typeof statusConfig] || statusConfig.in_progress;
-                  const StatusIcon = statusInfo.icon;
+          {visibleCertificates.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-sm font-medium text-muted-foreground">
+                    <th className="pb-3">Candidate</th>
+                    <th className="pb-3">Mentor</th>
+                    <th className="pb-3">Department</th>
+                    <th className="pb-3">Completion</th>
+                    <th className="pb-3">Status</th>
+                    <th className="pb-3">Certificate #</th>
+                    <th className="pb-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {visibleCertificates.map((cert) => {
+                    const statusInfo = getStatusInfo(cert.status);
+                    const StatusIcon = statusInfo.icon;
+                    const mentorName = cert.mentorName || cert.mentor || '-';
+                    const downloadUrl = getDownloadUrl(cert);
 
-                  return (
-                    <tr key={cert.id || cert._id || cert.candidateName} className="text-sm">
-                      <td className="py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                            {(cert.candidateName || '?').split(' ').map((n) => n[0]).join('')}
+                    return (
+                      <tr key={getCertificateId(cert)} className="text-sm">
+                        <td className="py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+                              {(cert.candidateName || '?').split(' ').map((name) => name[0]).join('').slice(0, 2)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium">{cert.candidateName || 'Unknown candidate'}</p>
+                              <p className="text-xs text-muted-foreground">{cert.candidateEmail || 'No email'}</p>
+                            </div>
                           </div>
+                        </td>
+                        <td className="py-4">
                           <div>
-                            <p className="font-medium">{cert.candidateName || 'Unknown candidate'}</p>
-                            <p className="text-xs text-muted-foreground">Mentor: {cert.mentor || '-'}</p>
+                            <p className="font-medium">{mentorName}</p>
+                            <p className="text-xs text-muted-foreground">{cert.mentorEmail || 'No mentor email'}</p>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <Badge variant="default">{cert.department || '-'}</Badge>
-                      </td>
-                      <td className="py-4 text-muted-foreground">{cert.internshipPeriod || '-'}</td>
-                      <td className="py-4">
-                        <Badge variant={statusInfo.variant} className="gap-1">
-                          <StatusIcon className="h-3 w-3" />
-                          {statusInfo.label}
-                        </Badge>
-                      </td>
-                      <td className="py-4">
-                        {cert.certificateNumber ? (
-                          <code className="rounded bg-gray-100 px-2 py-1 text-xs">
-                            {cert.certificateNumber}
-                          </code>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="py-4">
-                        {cert.mentorApproved ? (
-                          <Badge variant="success" className="gap-1">
-                            <CheckCircle className="h-3 w-3" />
-                            Approved
+                        </td>
+                        <td className="py-4">
+                          <Badge variant="default">{cert.department || '-'}</Badge>
+                        </td>
+                        <td className="py-4 text-muted-foreground">
+                          <div>
+                            <p>{formatDate(cert.completionDate)}</p>
+                            <p className="text-xs">{cert.internshipPeriod || 'No period'}</p>
+                          </div>
+                        </td>
+                        <td className="py-4">
+                          <Badge variant={statusInfo.variant} className="gap-1">
+                            <StatusIcon className="h-3 w-3" />
+                            {statusInfo.label}
                           </Badge>
-                        ) : (
-                          <Badge variant="warning" className="gap-1">
-                            <Clock className="h-3 w-3" />
-                            Pending
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-2">
-                          {cert.status === 'issued' && (
-                            <>
-                              <Button variant="ghost" size="sm">
-                                <FileText className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Download className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Send className="h-4 w-4" />
-                              </Button>
-                            </>
+                        </td>
+                        <td className="py-4">
+                          {cert.certificateNumber ? (
+                            <code className="rounded bg-gray-100 px-2 py-1 text-xs">
+                              {cert.certificateNumber}
+                            </code>
+                          ) : (
+                            <span className="text-muted-foreground">Not assigned</span>
                           )}
-                          {cert.status === 'pending_approval' && (
-                            <Button variant="primary" size="sm">
-                              Approve
+                        </td>
+                        <td className="py-4">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              disabled={!downloadUrl}
+                              onClick={() => handleDownload(cert)}
+                            >
+                              <Download className="h-4 w-4" />
+                              PDF
                             </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {!visibleCertificates.length && (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                No certificates to display.
+                            <Button variant="ghost" size="sm" disabled={!cert.candidateEmail}>
+                              <Send className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex min-h-72 flex-col items-center justify-center rounded-md border border-dashed border-border p-8 text-center">
+              <Award className="h-10 w-10 text-muted-foreground" />
+              <h3 className="mt-4 font-semibold">No certificates found</h3>
+              <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                Issue a certificate when an internship is complete, or retry after the backend has certificate records.
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <Button variant="outline" onClick={loadCertificates}>
+                  Retry
+                </Button>
+                <Button variant="primary" onClick={() => setIsIssueOpen(true)}>
+                  Issue Certificate
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={isIssueOpen} onOpenChange={setIsIssueOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Issue Certificate</DialogTitle>
+            <DialogDescription>
+              Create a certificate request for a completed internship.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-5" onSubmit={handleIssueCertificate}>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="candidateName" className="text-sm font-medium">Candidate name</label>
+                <Input id="candidateName" value={issueForm.candidateName} onChange={(event) => updateIssueForm('candidateName', event.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="candidateEmail" className="text-sm font-medium">Candidate email</label>
+                <Input id="candidateEmail" type="email" value={issueForm.candidateEmail} onChange={(event) => updateIssueForm('candidateEmail', event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="department" className="text-sm font-medium">Department</label>
+                <Input id="department" value={issueForm.department} onChange={(event) => updateIssueForm('department', event.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="completionDate" className="text-sm font-medium">Completion date</label>
+                <Input id="completionDate" type="date" value={issueForm.completionDate} onChange={(event) => updateIssueForm('completionDate', event.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="mentorName" className="text-sm font-medium">Mentor name</label>
+                <Input id="mentorName" value={issueForm.mentorName} onChange={(event) => updateIssueForm('mentorName', event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="mentorEmail" className="text-sm font-medium">Mentor email</label>
+                <Input id="mentorEmail" type="email" value={issueForm.mentorEmail} onChange={(event) => updateIssueForm('mentorEmail', event.target.value)} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label htmlFor="internshipPeriod" className="text-sm font-medium">Internship period</label>
+                <Input id="internshipPeriod" value={issueForm.internshipPeriod} onChange={(event) => updateIssueForm('internshipPeriod', event.target.value)} placeholder="Jun 2026 - Aug 2026" />
+              </div>
+            </div>
+
+            {issueError && (
+              <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {issueError}
               </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Verification Process</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-border p-4">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
-                <CheckCircle className="h-6 w-6 text-blue-600" />
-              </div>
-              <h4 className="font-semibold">Completion Verification</h4>
-              <p className="mt-2 text-sm text-muted-foreground">
-                System automatically checks internship completion, attendance records, and required
-                documentation
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-border p-4">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100">
-                <User className="h-6 w-6 text-purple-600" />
-              </div>
-              <h4 className="font-semibold">Mentor Approval</h4>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Mentor reviews intern performance and approves certificate generation
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-border p-4">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-100">
-                <Award className="h-6 w-6 text-emerald-600" />
-              </div>
-              <h4 className="font-semibold">Certificate Generation</h4>
-              <p className="mt-2 text-sm text-muted-foreground">
-                PDF certificate generated with unique number and digital signatures
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsIssueOpen(false)} disabled={isIssuing}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={isIssuing}>
+                {isIssuing ? 'Issuing...' : 'Issue Certificate'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
