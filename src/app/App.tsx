@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { RoleRoute } from './components/auth/RoleRoute';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Referrals } from './pages/Referrals';
@@ -19,27 +21,47 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/referrals" element={<Referrals />} />
-          <Route path="/candidates" element={<Candidates />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/documents" element={<Documents />} />
-          <Route path="/ids" element={<IDs />} />
-          <Route path="/access" element={<Access />} />
-          <Route path="/tracking" element={<Tracking />} />
-          <Route path="/certificates" element={<Certificates />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/ai-assistant" element={<AIAssistant />} />
-          <Route
-            path="/settings"
-            element={
-              <Placeholder
-                title="Settings"
-                description="Platform configuration and governance coming soon"
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/referrals" element={<Referrals />} />
+            <Route path="/candidates" element={<Candidates />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/documents" element={<Documents />} />
+            <Route
+              element={
+                <RoleRoute allowedRoles={['superAdmin', 'hr', 'it']} />
+              }
+            >
+              <Route path="/ids" element={<IDs />} />
+              <Route path="/access" element={<Access />} />
+            </Route>
+            <Route path="/tracking" element={<Tracking />} />
+            <Route path="/certificates" element={<Certificates />} />
+            <Route
+              element={
+                <RoleRoute allowedRoles={['superAdmin', 'hr', 'compliance']} />
+              }
+            >
+              <Route path="/reports" element={<Reports />} />
+            </Route>
+            <Route path="/ai-assistant" element={<AIAssistant />} />
+            <Route
+              element={
+                <RoleRoute allowedRoles={['superAdmin']} />
+              }
+            >
+              <Route
+                path="/settings"
+                element={
+                  <Placeholder
+                    title="Settings"
+                    description="Platform configuration and governance coming soon"
+                  />
+                }
               />
-            }
-          />
+            </Route>
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>

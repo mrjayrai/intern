@@ -1,17 +1,32 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Sparkles, Mail, Lock, Building2 } from 'lucide-react';
 import { api, setSession } from '../lib/api';
+import { getStoredSession } from '../lib/api';
+
+type LoginLocationState = {
+  from?: {
+    pathname?: string;
+  };
+};
 
 export function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const state = location.state as LoginLocationState | null;
+  const redirectPath = state?.from?.pathname || '/';
+  const existingSession = getStoredSession();
+
+  if (existingSession) {
+    return <Navigate to={redirectPath} replace />;
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +36,7 @@ export function Login() {
     try {
       const session = await api.login(email, password);
       setSession(session.accessToken, session.user);
-      navigate('/');
+      navigate(redirectPath, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to sign in');
     } finally {
@@ -30,7 +45,7 @@ export function Login() {
   };
 
   const handleSSOLogin = () => {
-    navigate('/');
+    setError('Microsoft SSO is not configured yet. Please sign in with email and password.');
   };
 
   return (

@@ -1,4 +1,6 @@
-﻿const validateReferralPayload = (payload, isUpdate = false) => {
+﻿const { WORKFLOW_STAGES } = require('../constants/workflowStages');
+
+const validateReferralPayload = (payload, isUpdate = false) => {
   const errors = [];
   const requiredFields = ['candidateName', 'candidateEmail', 'candidatePhone'];
 
@@ -19,6 +21,10 @@
 
   if (payload.skills && !Array.isArray(payload.skills) && typeof payload.skills !== 'string') {
     errors.push('skills must be an array of strings or a comma-separated string');
+  }
+
+  if (payload.workflowStage && !Object.values(WORKFLOW_STAGES).includes(payload.workflowStage)) {
+    errors.push('workflowStage is invalid');
   }
 
   return errors;

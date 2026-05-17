@@ -2,6 +2,27 @@ type ApiOptions = RequestInit & {
   auth?: boolean;
 };
 
+export type UserRole =
+  | 'superAdmin'
+  | 'hr'
+  | 'mentor'
+  | 'referrer'
+  | 'candidate'
+  | 'it'
+  | 'compliance';
+
+export type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+};
+
+export type AuthSession = {
+  accessToken: string;
+  user: AuthUser;
+};
+
 export type ApiResponse<T> = {
   success: boolean;
   data: T;
@@ -16,7 +37,28 @@ export function getAccessToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-export function setSession(accessToken: string, user: unknown) {
+export function getStoredUser(): AuthUser | null {
+  const storedUser = localStorage.getItem(USER_KEY);
+  if (!storedUser) return null;
+
+  try {
+    return JSON.parse(storedUser) as AuthUser;
+  } catch {
+    clearSession();
+    return null;
+  }
+}
+
+export function getStoredSession(): AuthSession | null {
+  const accessToken = getAccessToken();
+  const user = getStoredUser();
+
+  if (!accessToken || !user) return null;
+
+  return { accessToken, user };
+}
+
+export function setSession(accessToken: string, user: AuthUser) {
   localStorage.setItem(TOKEN_KEY, accessToken);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
@@ -51,7 +93,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
 
 export const api = {
   login: (email: string, password: string) =>
-    apiRequest<{ accessToken: string; user: { id: string; name: string; email: string; role: string } }>(
+    apiRequest<AuthSession>(
       '/api/auth/login',
       {
         auth: false,
