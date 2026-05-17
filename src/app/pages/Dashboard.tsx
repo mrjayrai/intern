@@ -1,56 +1,74 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MetricCard } from '../components/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { Skeleton } from '../components/ui/skeleton';
 import { api } from '../lib/api';
 import {
-  Users,
+  Activity,
+  AlertTriangle,
+  Award,
   ClipboardCheck,
   FileText,
-  AlertTriangle,
-  IdCard,
-  Activity,
-  Award,
+  RefreshCcw,
   Sparkles,
-  XCircle
+  Users,
+  XCircle,
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 type DashboardStats = {
+  totalReferrals?: number;
   totalInterns?: number;
-  totalInternsChange?: string;
   pendingOnboarding?: number;
-  pendingOnboardingChange?: string;
   ndaPending?: number;
-  ndaPendingChange?: string;
   slaBreaches?: number;
-  slaBreachesChange?: string;
-  idsCreatedToday?: number;
   activeInternships?: number;
+  certificatesIssued?: number;
   certificatesPending?: number;
-  aiAccuracyScore?: string;
 };
 
-type ChartPoint = {
-  stage?: string;
-  month?: string;
-  name?: string;
-  count?: number;
+type FunnelPoint = {
+  stage: string;
+  count: number;
+};
+
+type TrendPoint = {
+  month: string;
+  referrals?: number;
   interns?: number;
-  value?: number;
+};
+
+type DepartmentPoint = {
+  name: string;
+  value: number;
   color?: string;
 };
 
-type DashboardActivity = {
-  id?: string | number;
+type ActivityItem = {
+  id?: string;
   message: string;
   time?: string;
-  color?: string;
+  performedBy?: string;
+  resourceType?: string;
 };
 
-type DashboardInsight = {
-  id?: string | number;
+type SlaAlert = {
+  id?: string;
   message: string;
   severity?: 'warning' | 'error';
   action?: string;
@@ -58,267 +76,306 @@ type DashboardInsight = {
 
 type DashboardData = {
   stats?: DashboardStats;
-  funnelData?: ChartPoint[];
-  trendData?: ChartPoint[];
-  departmentData?: ChartPoint[];
-  timeline?: DashboardActivity[];
-  aiInsights?: DashboardInsight[];
+  funnelData?: FunnelPoint[];
+  trendData?: TrendPoint[];
+  departmentData?: DepartmentPoint[];
+  timeline?: ActivityItem[];
+  slaAlerts?: SlaAlert[];
 };
+
+const stageLabels: Record<string, string> = {
+  REFERRED: 'Referred',
+  HR_REVIEW: 'HR Review',
+  JOINING_FORM_PENDING: 'Joining Form',
+  NDA_PENDING: 'NDA Pending',
+  NON_WORKER_ID_PENDING: 'ID Pending',
+  ACCESS_PROVISIONING: 'Access',
+  READY_TO_START: 'Ready',
+  ACTIVE: 'Active',
+  EXTENSION_REQUESTED: 'Extension',
+  COMPLETED: 'Completed',
+  CERTIFICATE_PENDING: 'Certificate Pending',
+  CERTIFICATE_ISSUED: 'Certificate Issued',
+  CLOSED: 'Closed',
+};
+
+const chartColors = ['#2563eb', '#059669', '#7c3aed', '#d97706', '#dc2626', '#0891b2', '#4f46e5'];
+
+function formatStage(stage: string) {
+  return stageLabels[stage] || stage.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatTime(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6 p-8">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-48" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+        <Skeleton className="h-10 w-28" />
+      </div>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {[1, 2, 3, 4].map((item) => (
+          <Skeleton key={item} className="h-32 rounded-lg" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Skeleton className="h-72 rounded-lg" />
+        <Skeleton className="h-72 rounded-lg xl:col-span-2" />
+      </div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Skeleton className="h-72 rounded-lg" />
+        <Skeleton className="h-72 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+function EmptyPanel({ message }: { message: string }) {
+  return (
+    <div className="flex h-[240px] items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
+}
 
 export function Dashboard() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadDashboard = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage('');
 
-    api.dashboard()
-      .then((data) => {
-        if (isMounted) setDashboard(data);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setDashboard(null);
-        setErrorMessage(err instanceof Error ? err.message : 'Unable to load dashboard');
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
+    try {
+      const data = await api.dashboard<DashboardData>();
+      setDashboard(data);
+    } catch (err) {
+      setDashboard(null);
+      setErrorMessage(err instanceof Error ? err.message : 'Unable to load dashboard');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
+
   const stats = dashboard?.stats || {};
-  const funnelData = dashboard?.funnelData || [];
+  const funnelData = (dashboard?.funnelData || []).map((item) => ({
+    ...item,
+    stageLabel: formatStage(item.stage),
+  }));
   const trendData = dashboard?.trendData || [];
   const departmentData = dashboard?.departmentData || [];
   const activities = dashboard?.timeline || [];
-  const aiInsights = dashboard?.aiInsights || [];
+  const slaAlerts = dashboard?.slaAlerts || [];
 
   return (
-    <div className="space-y-6 p-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-4 md:p-6 xl:p-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isLoading ? 'Loading the latest program overview...' : errorMessage || "Welcome back! Here's your program overview."}
+            Real-time internship workflow, SLA, and activity overview.
           </p>
         </div>
-        <Button variant="ai" className="gap-2">
-          <Sparkles className="h-4 w-4" />
-          AI Insights
+        <Button variant="outline" className="gap-2 self-start" onClick={loadDashboard}>
+          <RefreshCcw className="h-4 w-4" />
+          Retry
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="Total Interns"
-          value={stats.totalInterns ?? 0}
-          change={stats.totalInternsChange ?? 'No change data'}
-          icon={Users}
-          trend="up"
-          color="bg-blue-500"
-        />
-        <MetricCard
-          title="Pending Onboarding"
-          value={stats.pendingOnboarding ?? 0}
-          change={stats.pendingOnboardingChange ?? 'No due data'}
-          icon={ClipboardCheck}
-          trend="neutral"
-          color="bg-purple-500"
-        />
-        <MetricCard
-          title="NDA Pending"
-          value={stats.ndaPending ?? 0}
-          change={stats.ndaPendingChange ?? 'No overdue data'}
-          icon={FileText}
-          trend="down"
-          color="bg-amber-500"
-        />
-        <MetricCard
-          title="SLA Breaches"
-          value={stats.slaBreaches ?? 0}
-          change={stats.slaBreachesChange ?? 'No breach data'}
-          icon={AlertTriangle}
-          trend="up"
-          color="bg-red-500"
-        />
+      {errorMessage && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <XCircle className="mt-0.5 h-5 w-5 text-red-600" />
+              <div>
+                <p className="font-medium text-red-900">Dashboard could not be loaded</p>
+                <p className="text-sm text-red-700">{errorMessage}</p>
+              </div>
+            </div>
+            <Button variant="outline" onClick={loadDashboard}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard title="Total Referrals" value={stats.totalReferrals ?? 0} change="Live from referrals" icon={Users} trend="neutral" color="bg-blue-500" />
+        <MetricCard title="Pending Onboarding" value={stats.pendingOnboarding ?? 0} change="Workflow queue" icon={ClipboardCheck} trend="neutral" color="bg-purple-500" />
+        <MetricCard title="NDA Pending" value={stats.ndaPending ?? 0} change="Awaiting documents" icon={FileText} trend="neutral" color="bg-amber-500" />
+        <MetricCard title="SLA Breaches" value={stats.slaBreaches ?? 0} change="Needs attention" icon={AlertTriangle} trend={(stats.slaBreaches ?? 0) > 0 ? 'down' : 'neutral'} color="bg-red-500" />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card>
           <CardHeader>
             <CardTitle>Quick Stats</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">IDs Created Today</span>
-              <Badge variant="success">{stats.idsCreatedToday ?? 0}</Badge>
-            </div>
-            <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Active Internships</span>
               <Badge variant="info">{stats.activeInternships ?? 0}</Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Certificates Issued</span>
+              <Badge variant="success">{stats.certificatesIssued ?? 0}</Badge>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Certificates Pending</span>
               <Badge variant="warning">{stats.certificatesPending ?? 0}</Badge>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">AI Accuracy Score</span>
-              <Badge variant="purple">{stats.aiAccuracyScore ?? '-'}</Badge>
+              <span className="text-sm text-muted-foreground">Total Interns</span>
+              <Badge variant="purple">{stats.totalInterns ?? 0}</Badge>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>Internship Lifecycle Funnel</CardTitle>
+            <CardTitle>Workflow Funnel</CardTitle>
           </CardHeader>
           <CardContent>
             {funnelData.length ? (
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={funnelData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="stage" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
+                  <XAxis dataKey="stageLabel" tick={{ fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={70} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
-                No funnel data available.
-              </div>
+              <EmptyPanel message="No workflow data available." />
             )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Referral Trend</CardTitle>
+            <CardTitle>Monthly Referral Trend</CardTitle>
           </CardHeader>
           <CardContent>
             {trendData.length ? (
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="interns" stroke="#8b5cf6" strokeWidth={2} />
+                  <Line type="monotone" dataKey="referrals" stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
-                No trend data available.
-              </div>
+              <EmptyPanel message="No monthly trend data available." />
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Department Distribution</CardTitle>
+            <CardTitle>SLA Alerts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {slaAlerts.length ? (
+              <div className="space-y-3">
+                {slaAlerts.map((alert) => (
+                  <div key={alert.id || alert.message} className="flex items-start justify-between gap-3 rounded-md border border-border p-3">
+                    <div className="flex items-start gap-3">
+                      {alert.severity === 'error' ? (
+                        <XCircle className="mt-0.5 h-4 w-4 text-red-600" />
+                      ) : (
+                        <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
+                      )}
+                      <p className="text-sm font-medium">{alert.message}</p>
+                    </div>
+                    {alert.action && (
+                      <Badge variant={alert.severity === 'error' ? 'error' : 'warning'}>{alert.action}</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyPanel message="No active SLA alerts." />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Activity Feed</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activities.length ? (
+              <div className="space-y-4">
+                {activities.map((activity) => (
+                  <div key={activity.id || activity.message} className="flex items-start gap-3 border-b border-border pb-3 last:border-0">
+                    <div className="mt-1 rounded-md bg-blue-50 p-2">
+                      <Activity className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{activity.message}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {[activity.performedBy, formatTime(activity.time)].filter(Boolean).join(' - ')}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyPanel message="No recent activity." />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-600" />
+              <CardTitle>Department Distribution</CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
             {departmentData.length ? (
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
-                  <Pie
-                    data={departmentData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
+                  <Pie data={departmentData} cx="50%" cy="50%" dataKey="value" outerRadius={88} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                     {departmentData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color || '#3b82f6'} />
+                      <Cell key={entry.name} fill={entry.color || chartColors[index % chartColors.length]} />
                     ))}
                   </Pie>
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
-                No department data available.
+              <div className="flex h-[260px] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border text-sm text-muted-foreground">
+                <Award className="h-5 w-5" />
+                Department data is not available yet.
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Workflow Activity Feed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {activities.map((activity) => (
-                (() => {
-                  return (
-                    <div key={activity.id || activity.message} className="flex items-start gap-3 pb-3 last:pb-0">
-                      <div className={`mt-1 rounded-lg bg-opacity-10 p-2 ${(activity.color || 'text-blue-600').replace('text-', 'bg-')}`}>
-                        <Activity className={`h-4 w-4 ${activity.color || 'text-blue-600'}`} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{activity.message}</p>
-                        <p className="text-xs text-muted-foreground">{activity.time}</p>
-                      </div>
-                    </div>
-                  );
-                })()
-              ))}
-              {!activities.length && (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  No workflow activity available.
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-purple-600" />
-              <CardTitle className="text-purple-900">AI Insights</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {aiInsights.map((insight) => (
-                <div
-                  key={insight.id}
-                  className="flex items-start justify-between gap-3 rounded-lg bg-white p-3 shadow-sm"
-                >
-                  <div className="flex items-start gap-2">
-                    {insight.severity === 'warning' ? (
-                      <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
-                    ) : (
-                      <XCircle className="mt-0.5 h-4 w-4 text-red-600" />
-                    )}
-                    <p className="text-sm">{insight.message}</p>
-                  </div>
-                  <Button size="sm" variant="ghost" className="shrink-0 text-xs">
-                    {insight.action}
-                  </Button>
-                </div>
-              ))}
-              {!aiInsights.length && (
-                <div className="rounded-lg bg-white p-6 text-center text-sm text-muted-foreground shadow-sm">
-                  No AI insights available.
-                </div>
-              )}
-            </div>
           </CardContent>
         </Card>
       </div>
