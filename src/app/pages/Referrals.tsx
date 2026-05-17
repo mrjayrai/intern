@@ -417,16 +417,16 @@ export function Referrals() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="px-4 pb-3 pt-5 sm:px-6">
             <DialogTitle>New Referral</DialogTitle>
             <DialogDescription>
               Add candidate details and submit the referral to the workflow.
             </DialogDescription>
           </DialogHeader>
 
-          <form className="space-y-5" onSubmit={handleCreateReferral}>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <form className="flex min-h-0 flex-col" onSubmit={handleCreateReferral}>
+            <div className="grid min-h-0 grid-cols-1 gap-4 overflow-y-auto px-4 pb-5 sm:px-6 md:grid-cols-2">
               <div className="space-y-2">
                 <label htmlFor="candidateName" className="text-sm font-medium">
                   Candidate name
@@ -595,7 +595,7 @@ export function Referrals() {
               </div>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="border-t border-border bg-background px-4 py-3 sm:px-6">
               <Button
                 type="button"
                 variant="outline"
