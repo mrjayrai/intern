@@ -43,6 +43,31 @@ export type ApiResponse<T> = {
 
 export type ApiRecord = Record<string, unknown>;
 
+export type ResumeParseResult = {
+  parsedData?: {
+    fullName?: { value?: string | null; confidence?: number };
+    email?: { value?: string | null; confidence?: number };
+    phone?: { value?: string | null; confidence?: number };
+    skills?: { value?: string[]; confidence?: number };
+  };
+  confidence?: {
+    overall?: number;
+    fullName?: number;
+    email?: number;
+    phone?: number;
+    skills?: number;
+  };
+  validation?: {
+    warnings?: string[];
+  };
+  duplicate?: {
+    duplicate?: boolean;
+    duplicateReason?: string;
+    existingReferralId?: string;
+    existingParseId?: string;
+  };
+};
+
 type StoredUser = Partial<AuthUser> & {
   _id?: string;
 };
@@ -225,6 +250,12 @@ export const api = {
     apiRequest('/api/referrals', {
       method: 'POST',
       data,
+    }),
+  parseResume: (data: FormData, onUploadProgress?: ApiRequestConfig['onUploadProgress']) =>
+    apiRequest<ResumeParseResult>('/api/resumes/parse', {
+      method: 'POST',
+      data,
+      onUploadProgress,
     }),
   ndas: <T = ApiRecord[]>() => apiRequest<T>('/api/nda'),
   submitNda: (data: ApiRecord) =>

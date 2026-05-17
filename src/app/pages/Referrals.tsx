@@ -3,6 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
+import { Progress } from '../components/ui/progress';
+import { Textarea } from '../components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -22,7 +25,10 @@ import {
   XCircle,
   Eye,
   Edit,
-  Trash2
+  Trash2,
+  UploadCloud,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 
 type Referral = {
@@ -59,6 +65,12 @@ type ReferralFormData = {
   resume: File | null;
 };
 
+type AiParseState = {
+  confidence: number | null;
+  warnings: string[];
+  duplicateWarning: string;
+};
+
 const statusConfig = {
   pending_review: { label: 'Pending Review', variant: 'warning' as const, icon: Clock },
   approved: { label: 'Approved', variant: 'success' as const, icon: CheckCircle },
@@ -78,6 +90,23 @@ const initialReferralForm: ReferralFormData = {
   resume: null,
 };
 
+const initialAiParseState: AiParseState = {
+  confidence: null,
+  warnings: [],
+  duplicateWarning: '',
+};
+
+const formatConfidence = (value?: number | null) => {
+  if (typeof value !== 'number' || Number.isNaN(value)) return null;
+  return Math.round(value <= 1 ? value * 100 : value);
+};
+
+const duplicateReasonLabels: Record<string, string> = {
+  REFERRAL_EMAIL_MATCH: 'A referral already exists with this email address.',
+  REFERRAL_PHONE_MATCH: 'A referral already exists with this phone number.',
+  TEXT_HASH_MATCH: 'This resume appears to have been parsed before.',
+};
+
 export function Referrals() {
   const [searchTerm, setSearchTerm] = useState('');
   const [referrals, setReferrals] = useState<Referral[]>([]);
@@ -86,6 +115,10 @@ export function Referrals() {
   const [formData, setFormData] = useState<ReferralFormData>(initialReferralForm);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isParsingResume, setIsParsingResume] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [parsingProgress, setParsingProgress] = useState(0);
+  const [aiParse, setAiParse] = useState<AiParseState>(initialAiParseState);
 
   const applyReferrals = (data: Referral[]) => {
     setReferrals(data);
@@ -131,8 +164,61 @@ export function Referrals() {
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
-  const updateResumeFile = (file: File | null) => {
+  const updateResumeFile = async (file: File | null) => {
     setFormData((current) => ({ ...current, resume: file }));
+    setFormError('');
+    setAiParse(initialAiParseState);
+    setUploadProgress(0);
+    setParsingProgress(0);
+
+    if (!file) return;
+
+    const payload = new FormData();
+    payload.append('resume', file);
+
+    setIsParsingResume(true);
+
+    try {
+      const result = await api.parseResume(payload, (event) => {
+        const total = event.total || file.size;
+        const nextUploadProgress = total ? Math.round((event.loaded * 100) / total) : 0;
+        setUploadProgress(Math.min(nextUploadProgress, 100));
+        setParsingProgress(Math.min(65, Math.round(nextUploadProgress * 0.65)));
+      });
+
+      setParsingProgress(85);
+
+      const parsed = result.parsedData || {};
+      const nextFields: Partial<ReferralFormData> = {};
+      const name = parsed.fullName?.value;
+      const email = parsed.email?.value;
+      const phone = parsed.phone?.value;
+      const skills = parsed.skills?.value;
+
+      if (name) nextFields.candidateName = name;
+      if (email) nextFields.candidateEmail = email;
+      if (phone) nextFields.candidatePhone = phone;
+      if (skills?.length) nextFields.skills = skills.join(', ');
+
+      setFormData((current) => ({ ...current, ...nextFields, resume: file }));
+
+      const confidence = formatConfidence(result.confidence?.overall);
+      const duplicateReason = result.duplicate?.duplicateReason || '';
+      setAiParse({
+        confidence,
+        warnings: result.validation?.warnings || [],
+        duplicateWarning: result.duplicate?.duplicate
+          ? duplicateReasonLabels[duplicateReason] || 'This candidate may already exist in referrals.'
+          : '',
+      });
+      setUploadProgress(100);
+      setParsingProgress(100);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Unable to parse resume');
+      setParsingProgress(0);
+    } finally {
+      setIsParsingResume(false);
+    }
   };
 
   const handleCreateReferral = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -162,6 +248,9 @@ export function Referrals() {
       const referralsData = await api.referrals();
       applyReferrals(referralsData);
       setFormData(initialReferralForm);
+      setAiParse(initialAiParseState);
+      setUploadProgress(0);
+      setParsingProgress(0);
       setIsCreateOpen(false);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Unable to create referral');
@@ -319,7 +408,15 @@ export function Referrals() {
         </CardContent>
       </Card>
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          setIsCreateOpen(open);
+          if (!open) {
+            setFormError('');
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>New Referral</DialogTitle>
@@ -419,21 +516,74 @@ export function Referrals() {
                   id="resume"
                   type="file"
                   accept=".pdf,.docx"
-                  onChange={(event) => updateResumeFile(event.target.files?.[0] || null)}
+                  disabled={isParsingResume || isSubmitting}
+                  onChange={(event) => void updateResumeFile(event.target.files?.[0] || null)}
                 />
                 <p className="text-xs text-muted-foreground">
                   Upload a PDF or DOCX resume up to 5 MB.
                 </p>
               </div>
+              {(isParsingResume || uploadProgress > 0 || aiParse.confidence !== null) && (
+                <div className="space-y-3 rounded-md border border-border bg-muted/30 p-4 md:col-span-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      {isParsingResume ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      ) : (
+                        <UploadCloud className="h-4 w-4 text-primary" />
+                      )}
+                      AI resume parsing
+                    </div>
+                    {aiParse.confidence !== null && (
+                      <Badge variant="info">Confidence {aiParse.confidence}%</Badge>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Upload progress</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <Progress value={uploadProgress} />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Parsing progress</span>
+                      <span>{parsingProgress}%</span>
+                    </div>
+                    <Progress value={parsingProgress} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Parsed fields are autofilled below and can be edited before submission.
+                  </p>
+                </div>
+              )}
+              {aiParse.duplicateWarning && (
+                <Alert className="border-amber-200 bg-amber-50 text-amber-900 md:col-span-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Possible duplicate</AlertTitle>
+                  <AlertDescription>{aiParse.duplicateWarning}</AlertDescription>
+                </Alert>
+              )}
+              {aiParse.warnings.length > 0 && (
+                <Alert className="md:col-span-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>AI parsing warnings</AlertTitle>
+                  <AlertDescription>
+                    {aiParse.warnings.map((warning) => (
+                      <p key={warning}>{warning}</p>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-2 md:col-span-2">
                 <label htmlFor="projectOverview" className="text-sm font-medium">
                   Project overview
                 </label>
-                <textarea
+                <Textarea
                   id="projectOverview"
                   value={formData.projectOverview}
                   onChange={(event) => updateFormField('projectOverview', event.target.value)}
-                  className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-h-24"
                   placeholder="Briefly describe the internship project"
                 />
               </div>
@@ -454,8 +604,9 @@ export function Referrals() {
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={isSubmitting}>
-                {isSubmitting ? 'Submitting...' : 'Submit Referral'}
+              <Button type="submit" variant="primary" disabled={isSubmitting || isParsingResume}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSubmitting ? 'Submitting...' : isParsingResume ? 'Parsing resume...' : 'Submit Referral'}
               </Button>
             </DialogFooter>
           </form>

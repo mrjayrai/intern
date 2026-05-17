@@ -11,6 +11,7 @@ const referralRoutes = require('./routes/referralRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const ndaRoutes = require('./routes/ndaRoutes');
+const resumeRoutes = require('./routes/resumeRoutes');
 const certificateRoutes = require('./routes/certificateRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
@@ -47,6 +48,7 @@ app.use('/api/referrals', referralRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/nda', ndaRoutes);
+app.use('/api/resumes', resumeRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/emails', emailRoutes);
 
