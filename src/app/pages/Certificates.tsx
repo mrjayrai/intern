@@ -11,46 +11,21 @@ import {
   CheckCircle,
   Clock,
   FileText,
-  Calendar,
   User
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-const fallbackCertificates = [
-  {
-    id: 1,
-    candidateName: 'Jordan Lee',
-    department: 'Product',
-    internshipPeriod: 'Mar 2026 - May 2026',
-    completionDate: '2026-05-31',
-    status: 'issued',
-    certificateNumber: 'CERT-2026-001',
-    mentor: 'Mike Wilson',
-    mentorApproved: true,
-  },
-  {
-    id: 2,
-    candidateName: 'Sarah Chen',
-    department: 'Engineering',
-    internshipPeriod: 'Jun 2026 - Aug 2026',
-    completionDate: null,
-    status: 'pending_approval',
-    certificateNumber: null,
-    mentor: 'John Doe',
-    mentorApproved: false,
-  },
-  {
-    id: 3,
-    candidateName: 'Emma Wilson',
-    department: 'Marketing',
-    internshipPeriod: 'May 2026 - Aug 2026',
-    completionDate: null,
-    status: 'in_progress',
-    certificateNumber: null,
-    mentor: 'Tom Johnson',
-    mentorApproved: true,
-  },
-];
+type CertificateRecord = {
+  id?: string;
+  _id?: string;
+  candidateName?: string;
+  department?: string;
+  internshipPeriod?: string;
+  status?: string;
+  certificateNumber?: string | null;
+  mentor?: string;
+  mentorApproved?: boolean;
+};
 
 const statusConfig = {
   issued: { label: 'Issued', variant: 'success' as const, icon: CheckCircle },
@@ -60,8 +35,7 @@ const statusConfig = {
 
 export function Certificates() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
-  const [certificates, setCertificates] = useState(fallbackCertificates);
+  const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [statusMessage, setStatusMessage] = useState('Loading certificates...');
 
   useEffect(() => {
@@ -70,12 +44,12 @@ export function Certificates() {
     api.certificates()
       .then((data) => {
         if (!isMounted) return;
-        setCertificates(data.length ? data : fallbackCertificates);
-        setStatusMessage(data.length ? 'Synced with backend' : 'Backend returned no certificates; showing sample data');
+        setCertificates(data);
+        setStatusMessage(data.length ? 'Synced with backend' : 'No certificates found');
       })
       .catch((err) => {
         if (!isMounted) return;
-        setCertificates(fallbackCertificates);
+        setCertificates([]);
         setStatusMessage(err instanceof Error ? err.message : 'Unable to load certificates');
       });
 
@@ -148,7 +122,7 @@ export function Certificates() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Avg Processing</p>
-                <p className="mt-1 text-2xl font-bold">2.1d</p>
+                <p className="mt-1 text-2xl font-bold">-</p>
               </div>
               <FileText className="h-8 w-8 text-purple-500" />
             </div>
@@ -191,22 +165,22 @@ export function Certificates() {
                   const StatusIcon = statusInfo.icon;
 
                   return (
-                    <tr key={cert.id} className="text-sm">
+                    <tr key={cert.id || cert._id || cert.candidateName} className="text-sm">
                       <td className="py-4">
                         <div className="flex items-center gap-3">
                           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                            {cert.candidateName.split(' ').map(n => n[0]).join('')}
+                            {(cert.candidateName || '?').split(' ').map((n) => n[0]).join('')}
                           </div>
                           <div>
-                            <p className="font-medium">{cert.candidateName}</p>
-                            <p className="text-xs text-muted-foreground">Mentor: {cert.mentor}</p>
+                            <p className="font-medium">{cert.candidateName || 'Unknown candidate'}</p>
+                            <p className="text-xs text-muted-foreground">Mentor: {cert.mentor || '-'}</p>
                           </div>
                         </div>
                       </td>
                       <td className="py-4">
-                        <Badge variant="default">{cert.department}</Badge>
+                        <Badge variant="default">{cert.department || '-'}</Badge>
                       </td>
-                      <td className="py-4 text-muted-foreground">{cert.internshipPeriod}</td>
+                      <td className="py-4 text-muted-foreground">{cert.internshipPeriod || '-'}</td>
                       <td className="py-4">
                         <Badge variant={statusInfo.variant} className="gap-1">
                           <StatusIcon className="h-3 w-3" />
@@ -239,7 +213,7 @@ export function Certificates() {
                         <div className="flex items-center gap-2">
                           {cert.status === 'issued' && (
                             <>
-                              <Button variant="ghost" size="sm" onClick={() => setShowPreview(true)}>
+                              <Button variant="ghost" size="sm">
                                 <FileText className="h-4 w-4" />
                               </Button>
                               <Button variant="ghost" size="sm">
@@ -262,74 +236,14 @@ export function Certificates() {
                 })}
               </tbody>
             </table>
+            {!visibleCertificates.length && (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No certificates to display.
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
-
-      {showPreview && (
-        <Card className="border-2 border-blue-500">
-          <CardHeader className="bg-blue-50">
-            <div className="flex items-center justify-between">
-              <CardTitle>Certificate Preview</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setShowPreview(false)}>
-                Close
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-8">
-            <div className="rounded-lg border-4 border-blue-600 bg-white p-12 shadow-2xl">
-              <div className="text-center">
-                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
-                  <Award className="h-12 w-12 text-white" />
-                </div>
-
-                <h2 className="text-4xl font-bold text-blue-900">
-                  Certificate of Completion
-                </h2>
-
-                <div className="my-8 space-y-4">
-                  <p className="text-lg text-gray-600">This is to certify that</p>
-                  <p className="text-3xl font-bold text-gray-900">Jordan Lee</p>
-                  <p className="text-lg text-gray-600">
-                    has successfully completed the internship program in
-                  </p>
-                  <p className="text-2xl font-semibold text-blue-700">Product Management</p>
-                  <p className="text-lg text-gray-600">
-                    From March 1, 2026 to May 31, 2026
-                  </p>
-                </div>
-
-                <div className="mt-12 grid grid-cols-2 gap-8">
-                  <div className="border-t-2 border-gray-300 pt-4">
-                    <p className="font-semibold">Mike Wilson</p>
-                    <p className="text-sm text-gray-600">Program Mentor</p>
-                  </div>
-                  <div className="border-t-2 border-gray-300 pt-4">
-                    <p className="font-semibold">HR Department</p>
-                    <p className="text-sm text-gray-600">Authorized Signatory</p>
-                  </div>
-                </div>
-
-                <div className="mt-8 text-sm text-gray-500">
-                  <p>Certificate Number: CERT-2026-001</p>
-                  <p>Issue Date: May 31, 2026</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-center gap-2">
-              <Button variant="primary">
-                <Download className="mr-2 h-4 w-4" />
-                Download PDF
-              </Button>
-              <Button variant="outline">
-                <Send className="mr-2 h-4 w-4" />
-                Email Certificate
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

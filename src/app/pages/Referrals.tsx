@@ -8,7 +8,6 @@ import {
   Plus,
   Search,
   Filter,
-  Upload,
   Sparkles,
   CheckCircle,
   Clock,
@@ -18,60 +17,27 @@ import {
   Trash2
 } from 'lucide-react';
 
-const fallbackReferrals = [
-  {
-    id: 1,
-    name: 'Sarah Chen',
-    email: 'sarah.chen@email.com',
-    phone: '+1 (555) 123-4567',
-    department: 'Engineering',
-    skills: ['React', 'TypeScript', 'Node.js'],
-    status: 'pending_review',
-    submittedBy: 'John Manager',
-    submittedDate: '2026-05-15',
-    aiScore: 95,
-    duplicate: false,
-  },
-  {
-    id: 2,
-    name: 'Michael Rodriguez',
-    email: 'michael.r@email.com',
-    phone: '+1 (555) 234-5678',
-    department: 'Design',
-    skills: ['Figma', 'UI/UX', 'Prototyping'],
-    status: 'approved',
-    submittedBy: 'Lisa Designer',
-    submittedDate: '2026-05-14',
-    aiScore: 88,
-    duplicate: false,
-  },
-  {
-    id: 3,
-    name: 'Emma Wilson',
-    email: 'emma.w@email.com',
-    phone: '+1 (555) 345-6789',
-    department: 'Marketing',
-    skills: ['Content', 'SEO', 'Analytics'],
-    status: 'ai_processing',
-    submittedBy: 'Tom Marketing',
-    submittedDate: '2026-05-16',
-    aiScore: 92,
-    duplicate: false,
-  },
-  {
-    id: 4,
-    name: 'Alex Kumar',
-    email: 'alex.k@email.com',
-    phone: '+1 (555) 456-7890',
-    department: 'Engineering',
-    skills: ['Python', 'Machine Learning', 'Data Science'],
-    status: 'rejected',
-    submittedBy: 'Sarah Chen',
-    submittedDate: '2026-05-13',
-    aiScore: 72,
-    duplicate: true,
-  },
-];
+type Referral = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  candidateName?: string;
+  email?: string;
+  candidateEmail?: string;
+  phone?: string;
+  candidatePhone?: string;
+  department?: string;
+  location?: string;
+  skills?: string[];
+  status?: string;
+  workflowStage?: string;
+  submittedBy?: string;
+  referrer?: string;
+  submittedDate?: string;
+  createdAt?: string;
+  aiScore?: number;
+  duplicate?: boolean;
+};
 
 const statusConfig = {
   pending_review: { label: 'Pending Review', variant: 'warning' as const, icon: Clock },
@@ -82,7 +48,7 @@ const statusConfig = {
 
 export function Referrals() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [referrals, setReferrals] = useState(fallbackReferrals);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
   const [statusMessage, setStatusMessage] = useState('Loading referrals...');
 
   useEffect(() => {
@@ -91,12 +57,12 @@ export function Referrals() {
     api.referrals()
       .then((data) => {
         if (!isMounted) return;
-        setReferrals(data.length ? data : fallbackReferrals);
-        setStatusMessage(data.length ? 'Synced with backend' : 'Backend returned no referrals; showing sample data');
+        setReferrals(data);
+        setStatusMessage(data.length ? 'Synced with backend' : 'No referrals found');
       })
       .catch((err) => {
         if (!isMounted) return;
-        setReferrals(fallbackReferrals);
+        setReferrals([]);
         setStatusMessage(err instanceof Error ? err.message : 'Unable to load referrals');
       });
 
@@ -107,7 +73,16 @@ export function Referrals() {
 
   const visibleReferrals = referrals.filter((referral) => {
     const query = searchTerm.toLowerCase();
-    return [referral.name, referral.email, referral.department, referral.submittedBy]
+    return [
+      referral.name,
+      referral.candidateName,
+      referral.email,
+      referral.candidateEmail,
+      referral.department,
+      referral.location,
+      referral.submittedBy,
+      referral.referrer,
+    ]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(query));
   });
@@ -166,13 +141,20 @@ export function Referrals() {
                 {visibleReferrals.map((referral) => {
                   const statusInfo = statusConfig[referral.status as keyof typeof statusConfig] || statusConfig.pending_review;
                   const StatusIcon = statusInfo.icon;
+                  const candidateName = referral.name || referral.candidateName || 'Unknown candidate';
+                  const email = referral.email || referral.candidateEmail || '-';
+                  const phone = referral.phone || referral.candidatePhone || '-';
+                  const submittedBy = referral.submittedBy || referral.referrer || 'Unknown';
+                  const submittedDate = referral.submittedDate || referral.createdAt || '-';
+                  const department = referral.department || referral.location || '-';
+                  const score = referral.aiScore ?? 0;
 
                   return (
-                    <tr key={referral.id} className="text-sm">
+                    <tr key={referral.id || referral._id || email} className="text-sm">
                       <td className="py-4">
                         <div>
-                          <p className="font-medium">{referral.name}</p>
-                          <p className="text-xs text-muted-foreground">by {referral.submittedBy}</p>
+                          <p className="font-medium">{candidateName}</p>
+                          <p className="text-xs text-muted-foreground">by {submittedBy}</p>
                           {referral.duplicate && (
                             <Badge variant="error" className="mt-1">
                               Duplicate
@@ -182,12 +164,12 @@ export function Referrals() {
                       </td>
                       <td className="py-4">
                         <div>
-                          <p>{referral.email}</p>
-                          <p className="text-xs text-muted-foreground">{referral.phone}</p>
+                          <p>{email}</p>
+                          <p className="text-xs text-muted-foreground">{phone}</p>
                         </div>
                       </td>
                       <td className="py-4">
-                        <Badge variant="default">{referral.department}</Badge>
+                        <Badge variant="default">{department}</Badge>
                       </td>
                       <td className="py-4">
                         <div className="flex flex-wrap gap-1">
@@ -214,19 +196,19 @@ export function Referrals() {
                           <div className="h-2 w-20 overflow-hidden rounded-full bg-gray-200">
                             <div
                               className={`h-full ${
-                                referral.aiScore >= 90
+                                score >= 90
                                   ? 'bg-emerald-500'
-                                  : referral.aiScore >= 75
+                                  : score >= 75
                                   ? 'bg-blue-500'
                                   : 'bg-amber-500'
                               }`}
-                              style={{ width: `${referral.aiScore}%` }}
+                              style={{ width: `${score}%` }}
                             />
                           </div>
-                          <span className="text-xs font-medium">{referral.aiScore}%</span>
+                          <span className="text-xs font-medium">{score}%</span>
                         </div>
                       </td>
-                      <td className="py-4 text-muted-foreground">{referral.submittedDate}</td>
+                      <td className="py-4 text-muted-foreground">{submittedDate}</td>
                       <td className="py-4">
                         <div className="flex items-center gap-2">
                           <Button variant="ghost" size="sm">
@@ -245,49 +227,11 @@ export function Referrals() {
                 })}
               </tbody>
             </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-600" />
-            <CardTitle className="text-purple-900">AI-Powered Referral Processing</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-start gap-3 rounded-lg bg-white p-4 shadow-sm">
-              <Upload className="mt-0.5 h-5 w-5 text-purple-600" />
-              <div>
-                <p className="font-medium">Automatic Resume Parsing</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Upload resumes and let AI extract candidate information, skills, and experience
-                  automatically with 98% accuracy.
-                </p>
+            {!visibleReferrals.length && (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No referrals to display.
               </div>
-            </div>
-            <div className="flex items-start gap-3 rounded-lg bg-white p-4 shadow-sm">
-              <CheckCircle className="mt-0.5 h-5 w-5 text-purple-600" />
-              <div>
-                <p className="font-medium">Duplicate Detection</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Automatically identifies duplicate candidates across name variations and email
-                  addresses to prevent redundant processing.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 rounded-lg bg-white p-4 shadow-sm">
-              <Sparkles className="mt-0.5 h-5 w-5 text-purple-600" />
-              <div>
-                <p className="font-medium">Candidate Matching Score</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  AI analyzes candidate profiles against role requirements and provides a matching
-                  score with confidence indicators.
-                </p>
-              </div>
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>

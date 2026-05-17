@@ -18,51 +18,16 @@ import {
   Send
 } from 'lucide-react';
 
-const fallbackDocuments = [
-  {
-    id: 1,
-    candidateName: 'Sarah Chen',
-    documentType: 'NDA',
-    status: 'signed',
-    signedDate: '2026-05-12',
-    sentDate: '2026-05-11',
-    expiryDate: '2027-05-12',
-  },
-  {
-    id: 2,
-    candidateName: 'Michael Rodriguez',
-    documentType: 'NDA',
-    status: 'pending',
-    sentDate: '2026-05-14',
-    expiryDate: null,
-  },
-  {
-    id: 3,
-    candidateName: 'Emma Wilson',
-    documentType: 'Confidentiality Agreement',
-    status: 'signed',
-    signedDate: '2026-05-10',
-    sentDate: '2026-05-09',
-    expiryDate: '2027-05-10',
-  },
-  {
-    id: 4,
-    candidateName: 'Alex Kumar',
-    documentType: 'NDA',
-    status: 'overdue',
-    sentDate: '2026-05-05',
-    expiryDate: null,
-  },
-  {
-    id: 5,
-    candidateName: 'Jordan Lee',
-    documentType: 'IP Agreement',
-    status: 'signed',
-    signedDate: '2026-05-13',
-    sentDate: '2026-05-12',
-    expiryDate: '2027-05-13',
-  },
-];
+type DocumentRecord = {
+  id?: string;
+  _id?: string;
+  candidateName?: string;
+  documentType?: string;
+  status?: string;
+  signedDate?: string | null;
+  sentDate?: string | null;
+  expiryDate?: string | null;
+};
 
 const statusConfig = {
   signed: { label: 'Signed', variant: 'success' as const, icon: CheckCircle },
@@ -72,8 +37,7 @@ const statusConfig = {
 
 export function Documents() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
-  const [documents, setDocuments] = useState(fallbackDocuments);
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [statusMessage, setStatusMessage] = useState('Loading documents...');
 
   useEffect(() => {
@@ -82,12 +46,12 @@ export function Documents() {
     api.ndas()
       .then((data) => {
         if (!isMounted) return;
-        setDocuments(data.length ? data : fallbackDocuments);
-        setStatusMessage(data.length ? 'Synced with backend' : 'Backend returned no documents; showing sample data');
+        setDocuments(data);
+        setStatusMessage(data.length ? 'Synced with backend' : 'No documents found');
       })
       .catch((err) => {
         if (!isMounted) return;
-        setDocuments(fallbackDocuments);
+        setDocuments([]);
         setStatusMessage(err instanceof Error ? err.message : 'Unable to load documents');
       });
 
@@ -215,7 +179,7 @@ export function Documents() {
                   const StatusIcon = statusInfo.icon;
 
                   return (
-                    <tr key={doc.id} className="text-sm">
+                    <tr key={doc.id || doc._id || doc.candidateName} className="text-sm">
                       <td className="py-4">
                         <p className="font-medium">{doc.candidateName}</p>
                       </td>
@@ -237,7 +201,7 @@ export function Documents() {
                       </td>
                       <td className="py-4">
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => setShowPreview(true)}>
+                          <Button variant="ghost" size="sm">
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="sm">
@@ -255,146 +219,14 @@ export function Documents() {
                 })}
               </tbody>
             </table>
+            {!visibleDocuments.length && (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No documents to display.
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
-
-      {showPreview && (
-        <Card className="border-2 border-blue-500">
-          <CardHeader className="bg-blue-50">
-            <div className="flex items-center justify-between">
-              <CardTitle>NDA Preview</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setShowPreview(false)}>
-                Close
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-8">
-            <div className="space-y-4 rounded-lg bg-white p-6 shadow-inner">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold">NON-DISCLOSURE AGREEMENT</h2>
-                <p className="mt-2 text-sm text-muted-foreground">Effective Date: May 11, 2026</p>
-              </div>
-
-              <div className="space-y-4 text-sm">
-                <p>
-                  This Non-Disclosure Agreement is entered into by and between <strong>[Company Name]</strong> and <strong>Sarah Chen</strong> for the purpose of protecting proprietary and confidential information.
-                </p>
-
-                <div>
-                  <h3 className="font-semibold">1. Definition of Confidential Information</h3>
-                  <p className="mt-1 text-muted-foreground">
-                    For purposes of this Agreement, Confidential Information shall include all information or material that has or could have commercial value...
-                  </p>
-                </div>
-
-                <div>
-                  <h3 className="font-semibold">2. Non-Disclosure Obligations</h3>
-                  <p className="mt-1 text-muted-foreground">
-                    The Receiving Party agrees to hold and maintain the Confidential Information in strictest confidence...
-                  </p>
-                </div>
-
-                <div>
-                  <h3 className="font-semibold">3. Term</h3>
-                  <p className="mt-1 text-muted-foreground">
-                    This Agreement shall remain in effect for a period of one (1) year from the Effective Date...
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-8 border-t border-border pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Signature Required</p>
-                    <p className="text-xs text-muted-foreground">Click below to request e-signature</p>
-                  </div>
-                  <Button variant="primary">
-                    <Send className="mr-2 h-4 w-4" />
-                    Send for Signature
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Document Templates</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              'Standard NDA Template',
-              'IP Assignment Agreement',
-              'Confidentiality Agreement',
-              'Code of Conduct',
-            ].map((template, index) => (
-              <div key={index} className="flex items-center justify-between rounded-lg border border-border p-3">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-blue-600" />
-                  <span className="font-medium">{template}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm">
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Signing Activity</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {[
-              { name: 'Sarah Chen', action: 'Signed NDA', time: '10 minutes ago', status: 'signed' },
-              { name: 'Michael Rodriguez', action: 'Opened NDA', time: '1 hour ago', status: 'viewed' },
-              { name: 'Emma Wilson', action: 'Reminder sent', time: '2 hours ago', status: 'reminded' },
-              { name: 'Alex Kumar', action: 'NDA sent', time: '3 hours ago', status: 'sent' },
-            ].map((activity, index) => (
-              <div key={index} className="flex items-start gap-3 border-b border-border pb-3 last:border-0">
-                <div
-                  className={`mt-1 rounded-full p-2 ${
-                    activity.status === 'signed'
-                      ? 'bg-emerald-100'
-                      : activity.status === 'viewed'
-                      ? 'bg-blue-100'
-                      : activity.status === 'reminded'
-                      ? 'bg-amber-100'
-                      : 'bg-gray-100'
-                  }`}
-                >
-                  <FileText
-                    className={`h-4 w-4 ${
-                      activity.status === 'signed'
-                        ? 'text-emerald-600'
-                        : activity.status === 'viewed'
-                        ? 'text-blue-600'
-                        : activity.status === 'reminded'
-                        ? 'text-amber-600'
-                        : 'text-gray-600'
-                    }`}
-                  />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{activity.name}</p>
-                  <p className="text-xs text-muted-foreground">{activity.action}</p>
-                  <p className="text-xs text-muted-foreground">{activity.time}</p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
