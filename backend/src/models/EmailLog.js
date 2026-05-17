@@ -7,6 +7,7 @@ const EmailLogSchema = new mongoose.Schema(
     subject: { type: String, trim: true },
     template: { type: String, trim: true },
     variables: { type: mongoose.Schema.Types.Mixed },
+    attachments: { type: [mongoose.Schema.Types.Mixed], default: [] },
     status: { type: String, trim: true, default: 'queued', index: true },
     attempts: { type: Number, default: 0 },
     error: { type: String },

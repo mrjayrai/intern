@@ -3,7 +3,10 @@ const mongoose = require('mongoose');
 const CertificateSchema = new mongoose.Schema(
   {
     candidate: { type: String, required: true, trim: true },
+    candidateEmail: { type: String, trim: true, lowercase: true },
+    department: { type: String, trim: true },
     mentor: { type: String, required: true, trim: true },
+    mentorEmail: { type: String, trim: true, lowercase: true },
     internshipDuration: { type: String, required: true, trim: true },
     completionDate: { type: Date, required: true },
     pdfPath: { type: String, required: true, trim: true },

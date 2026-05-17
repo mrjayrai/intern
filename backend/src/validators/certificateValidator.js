@@ -2,16 +2,19 @@ const mongoose = require('mongoose');
 
 const validateCertificatePayload = (payload) => {
   const errors = [];
+  const candidate = payload.candidate || payload.candidateName;
+  const mentor = payload.mentor || payload.mentorName;
+  const internshipDuration = payload.internshipDuration || payload.internshipPeriod;
 
-  if (!payload.candidate || typeof payload.candidate !== 'string' || !payload.candidate.trim()) {
+  if (!candidate || typeof candidate !== 'string' || !candidate.trim()) {
     errors.push('candidate is required');
   }
 
-  if (!payload.mentor || typeof payload.mentor !== 'string' || !payload.mentor.trim()) {
+  if (!mentor || typeof mentor !== 'string' || !mentor.trim()) {
     errors.push('mentor is required');
   }
 
-  if (!payload.internshipDuration || typeof payload.internshipDuration !== 'string' || !payload.internshipDuration.trim()) {
+  if (!internshipDuration || typeof internshipDuration !== 'string' || !internshipDuration.trim()) {
     errors.push('internshipDuration is required');
   }
 

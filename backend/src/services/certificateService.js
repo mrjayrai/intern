@@ -6,22 +6,33 @@ const Certificate = require('../models/Certificate');
 const Referral = require('../models/Referral');
 const auditService = require('./auditService');
 const workflowService = require('./workflowService');
+const emailService = require('./emailService');
 const { createCertificatePdf } = require('../utils/pdfGenerator');
 const { validateCertificatePayload } = require('../validators/certificateValidator');
 const ApiError = require('../utils/apiError');
 const { WORKFLOW_STAGES } = require('../constants/workflowStages');
 
 const buildCertificateData = (payload, user) => ({
-  candidate: payload.candidate.trim(),
-  mentor: payload.mentor.trim(),
-  internshipDuration: payload.internshipDuration.trim(),
+  candidate: (payload.candidate || payload.candidateName).trim(),
+  candidateEmail: payload.candidateEmail ? payload.candidateEmail.trim().toLowerCase() : undefined,
+  department: payload.department ? payload.department.trim() : undefined,
+  mentor: (payload.mentor || payload.mentorName).trim(),
+  mentorEmail: payload.mentorEmail ? payload.mentorEmail.trim().toLowerCase() : undefined,
+  internshipDuration: (payload.internshipDuration || payload.internshipPeriod).trim(),
   completionDate: new Date(payload.completionDate),
-  issuedBy: user._id,
+  issuedBy: user._id || user.id,
   verificationId: payload.verificationId && typeof payload.verificationId === 'string'
     ? payload.verificationId.trim()
     : uuidv4(),
   referralId: payload.referralId ? payload.referralId : undefined,
 });
+
+const buildCertificateLink = (certificateId) => {
+  const publicBaseUrl = (process.env.PUBLIC_API_URL || process.env.APP_URL || '').replace(/\/$/, '');
+  return `${publicBaseUrl}/api/certificates/download/${certificateId}`;
+};
+
+const resolveGeneratedPdfPath = (relativePath) => path.resolve(path.join(__dirname, '..', relativePath));
 
 const getAllCertificates = async (filters = {}) => {
   return Certificate.find(filters)
@@ -57,6 +68,50 @@ const issueCertificate = async (payload, user) => {
 
   const certificate = await Certificate.create(certificateData);
 
+  if (certificate.candidateEmail) {
+    await emailService.enqueueEmail(
+      certificate.candidateEmail,
+      'certificate',
+      {
+        name: certificate.candidate,
+        certificateLink: buildCertificateLink(certificate._id),
+        verificationId: certificate.verificationId,
+      },
+      {
+        attachments: [
+          {
+            filename: `InternFlow-Certificate-${certificate.verificationId}.pdf`,
+            path: resolveGeneratedPdfPath(certificate.pdfPath),
+            contentType: 'application/pdf',
+          },
+        ],
+      }
+    );
+    emailService.processQueue(10).catch(() => {});
+  }
+
+  
+  if (certificate.candidateEmail) {
+    await emailService.sendTemplate(
+      certificate.candidateEmail,
+      'certificate',
+      {
+        name: certificate.candidate,
+        certificateLink: buildCertificateLink(certificate._id),
+        verificationId: certificate.verificationId,
+      },
+      {
+        attachments: [
+          {
+            filename: `InternFlow-Certificate-${certificate.verificationId}.pdf`,
+            path: resolveGeneratedPdfPath(certificate.pdfPath),
+            contentType: 'application/pdf',
+          },
+        ],
+      }
+    );
+  }
+
   if (payload.referralId) {
     const referral = await Referral.findById(payload.referralId);
     if (!referral) {
@@ -66,7 +121,7 @@ const issueCertificate = async (payload, user) => {
     await workflowService.transitionReferralStage(
       referral,
       WORKFLOW_STAGES.CERTIFICATE_ISSUED,
-      { name: issuedByName, id: user._id },
+      { name: issuedByName, id: user._id || user.id },
       'Certificate issued'
     );
   }
@@ -76,7 +131,7 @@ const issueCertificate = async (payload, user) => {
     resourceType: 'Certificate',
     resourceId: certificate._id,
     performedBy: issuedByName,
-    performedById: user._id,
+    performedById: user._id || user.id,
     details: {
       candidate: certificate.candidate,
       mentor: certificate.mentor,

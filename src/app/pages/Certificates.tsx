@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
-import { api, type ApiRecord } from '../lib/api';
+import { api, getAccessToken, type ApiRecord } from '../lib/api';
 import {
   AlertTriangle,
   Award,
@@ -33,14 +33,17 @@ type CertificateStatus = 'issued' | 'pending_approval' | 'in_progress' | 'revoke
 type CertificateRecord = {
   id?: string;
   _id?: string;
+  candidate?: string;
   candidateName?: string;
   candidateEmail?: string;
   department?: string;
+  internshipDuration?: string;
   internshipPeriod?: string;
   completionDate?: string | null;
   issueDate?: string | null;
   status?: CertificateStatus | string;
   certificateNumber?: string | null;
+  verificationId?: string | null;
   mentor?: string;
   mentorName?: string;
   mentorEmail?: string;
@@ -79,7 +82,7 @@ const statusConfig: Record<string, { label: string; variant: 'success' | 'warnin
 };
 
 function getCertificateId(cert: CertificateRecord) {
-  return cert.id || cert._id || cert.certificateNumber || cert.candidateEmail || cert.candidateName || 'certificate';
+  return cert.id || cert._id || cert.certificateNumber || cert.verificationId || cert.candidateEmail || cert.candidateName || cert.candidate || 'certificate';
 }
 
 function getStatusInfo(status?: string) {
@@ -94,7 +97,8 @@ function formatDate(value?: string | null) {
 }
 
 function getDownloadUrl(cert: CertificateRecord) {
-  return cert.pdfUrl || cert.downloadUrl || cert.certificateUrl || '';
+  const id = cert._id || cert.id;
+  return cert.pdfUrl || cert.downloadUrl || cert.certificateUrl || (id ? api.certificateDownloadUrl(id) : '');
 }
 
 function CertificatesSkeleton() {
@@ -151,12 +155,14 @@ export function Certificates() {
     return certificates.filter((cert) => (
       [
         cert.candidateName,
+        cert.candidate,
         cert.candidateEmail,
         cert.department,
         cert.mentor,
         cert.mentorName,
         cert.mentorEmail,
         cert.certificateNumber,
+        cert.verificationId,
         cert.status,
       ]
         .filter(Boolean)
@@ -176,15 +182,23 @@ export function Certificates() {
   const handleDownload = (cert: CertificateRecord) => {
     const url = getDownloadUrl(cert);
     if (!url) return;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const token = getAccessToken();
+    const separator = url.includes('?') ? '&' : '?';
+    window.open(token ? `${url}${separator}token=${encodeURIComponent(token)}` : url, '_blank', 'noopener,noreferrer');
   };
 
   const handleIssueCertificate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIssueError('');
 
-    if (!issueForm.candidateName.trim() || !issueForm.department.trim() || !issueForm.completionDate) {
-      setIssueError('Candidate name, department, and completion date are required.');
+    if (
+      !issueForm.candidateName.trim()
+      || !issueForm.department.trim()
+      || !issueForm.mentorName.trim()
+      || !issueForm.internshipPeriod.trim()
+      || !issueForm.completionDate
+    ) {
+      setIssueError('Candidate name, department, mentor, internship period, and completion date are required.');
       return;
     }
 
@@ -192,11 +206,14 @@ export function Certificates() {
 
     try {
       const payload: ApiRecord = {
+        candidate: issueForm.candidateName.trim(),
         candidateName: issueForm.candidateName.trim(),
         candidateEmail: issueForm.candidateEmail.trim() || undefined,
         department: issueForm.department.trim(),
+        mentor: issueForm.mentorName.trim() || undefined,
         mentorName: issueForm.mentorName.trim() || undefined,
         mentorEmail: issueForm.mentorEmail.trim() || undefined,
+        internshipDuration: issueForm.internshipPeriod.trim() || undefined,
         internshipPeriod: issueForm.internshipPeriod.trim() || undefined,
         completionDate: issueForm.completionDate,
       };
@@ -335,6 +352,7 @@ export function Certificates() {
                   {visibleCertificates.map((cert) => {
                     const statusInfo = getStatusInfo(cert.status);
                     const StatusIcon = statusInfo.icon;
+                    const candidateName = cert.candidateName || cert.candidate || 'Unknown candidate';
                     const mentorName = cert.mentorName || cert.mentor || '-';
                     const downloadUrl = getDownloadUrl(cert);
 
@@ -343,10 +361,10 @@ export function Certificates() {
                         <td className="py-4">
                           <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                              {(cert.candidateName || '?').split(' ').map((name) => name[0]).join('').slice(0, 2)}
+                              {candidateName.split(' ').map((name) => name[0]).join('').slice(0, 2)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium">{cert.candidateName || 'Unknown candidate'}</p>
+                              <p className="font-medium">{candidateName}</p>
                               <p className="text-xs text-muted-foreground">{cert.candidateEmail || 'No email'}</p>
                             </div>
                           </div>
@@ -363,7 +381,7 @@ export function Certificates() {
                         <td className="py-4 text-muted-foreground">
                           <div>
                             <p>{formatDate(cert.completionDate)}</p>
-                            <p className="text-xs">{cert.internshipPeriod || 'No period'}</p>
+                            <p className="text-xs">{cert.internshipPeriod || cert.internshipDuration || 'No period'}</p>
                           </div>
                         </td>
                         <td className="py-4">
@@ -373,9 +391,9 @@ export function Certificates() {
                           </Badge>
                         </td>
                         <td className="py-4">
-                          {cert.certificateNumber ? (
+                          {cert.certificateNumber || cert.verificationId ? (
                             <code className="rounded bg-gray-100 px-2 py-1 text-xs">
-                              {cert.certificateNumber}
+                              {cert.certificateNumber || cert.verificationId}
                             </code>
                           ) : (
                             <span className="text-muted-foreground">Not assigned</span>
@@ -453,7 +471,7 @@ export function Certificates() {
               </div>
               <div className="space-y-2">
                 <label htmlFor="mentorName" className="text-sm font-medium">Mentor name</label>
-                <Input id="mentorName" value={issueForm.mentorName} onChange={(event) => updateIssueForm('mentorName', event.target.value)} />
+                <Input id="mentorName" value={issueForm.mentorName} onChange={(event) => updateIssueForm('mentorName', event.target.value)} required />
               </div>
               <div className="space-y-2">
                 <label htmlFor="mentorEmail" className="text-sm font-medium">Mentor email</label>
@@ -461,7 +479,7 @@ export function Certificates() {
               </div>
               <div className="space-y-2 md:col-span-2">
                 <label htmlFor="internshipPeriod" className="text-sm font-medium">Internship period</label>
-                <Input id="internshipPeriod" value={issueForm.internshipPeriod} onChange={(event) => updateIssueForm('internshipPeriod', event.target.value)} placeholder="Jun 2026 - Aug 2026" />
+                <Input id="internshipPeriod" value={issueForm.internshipPeriod} onChange={(event) => updateIssueForm('internshipPeriod', event.target.value)} placeholder="Jun 2026 - Aug 2026" required />
               </div>
             </div>
 

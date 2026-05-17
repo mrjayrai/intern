@@ -18,7 +18,9 @@ const parseBearerToken = (authorizationHeader) => {
 };
 
 module.exports = async (req, res, next) => {
-  const { token, reason } = parseBearerToken(req.headers.authorization || '');
+  const parsed = parseBearerToken(req.headers.authorization || '');
+  const token = parsed.token || req.query.token;
+  const reason = parsed.reason;
 
   if (!token) {
     req.authErrorReason = reason;

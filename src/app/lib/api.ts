@@ -207,6 +207,10 @@ export async function apiRequest<T>(path: string, options: ApiRequestConfig = {}
   }
 }
 
+export function apiUrl(path: string) {
+  return `${API_BASE_URL}${path}`;
+}
+
 export const api = {
   login: (email: string, password: string) =>
     apiRequest<AuthSession>('/api/auth/login', {
@@ -230,9 +234,10 @@ export const api = {
     }),
   certificates: <T = ApiRecord[]>() => apiRequest<T>('/api/certificates'),
   issueCertificate: (data: ApiRecord) =>
-    apiRequest('/api/certificates', {
+    apiRequest('/api/certificates/issue', {
       method: 'POST',
       data,
     }),
+  certificateDownloadUrl: (id: string) => apiUrl(`/api/certificates/download/${id}`),
   notifications: <T = ApiRecord[]>() => apiRequest<T>('/api/notifications'),
 };

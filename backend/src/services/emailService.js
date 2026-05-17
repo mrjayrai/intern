@@ -30,8 +30,8 @@ const renderTemplate = (templateName, variables = {}) => {
   return tpl.render(variables);
 };
 
-const createLog = async ({ to, from, subject, template, variables }) => {
-  const log = new EmailLog({ to, from, subject, template, variables, status: 'queued' });
+const createLog = async ({ to, from, subject, template, variables, attachments = [] }) => {
+  const log = new EmailLog({ to, from, subject, template, variables, attachments, status: 'queued' });
   return log.save();
 };
 
@@ -52,6 +52,7 @@ const processLogSend = async (logId) => {
     subject: log.subject,
     text: log.variables && log.variables.text ? log.variables.text : undefined,
     html: log.variables && log.variables.html ? log.variables.html : undefined,
+    attachments: log.attachments || [],
   };
 
   try {
@@ -73,7 +74,14 @@ const processLogSend = async (logId) => {
 
 const sendTemplate = async (to, templateName, variables = {}, options = {}) => {
   const rendered = renderTemplate(templateName, variables);
-  const log = await createLog({ to, from: options.from || DEFAULT_FROM, subject: rendered.subject, template: templateName, variables: { ...variables, text: rendered.text, html: rendered.html } });
+  const log = await createLog({
+    to,
+    from: options.from || DEFAULT_FROM,
+    subject: rendered.subject,
+    template: templateName,
+    variables: { ...variables, text: rendered.text, html: rendered.html },
+    attachments: options.attachments || [],
+  });
 
   if (options.enqueue === false) {
     // send immediately and return status
