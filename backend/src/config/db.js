@@ -2,7 +2,7 @@
 const logger = require('../utils/logger');
 
 const connectDB = async () => {
-  const connectionString = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/internflow';
+  const connectionString = process.env.MONGO_URI ;
 
   mongoose.set('strictQuery', true);
 
