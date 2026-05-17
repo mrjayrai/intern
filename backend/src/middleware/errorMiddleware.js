@@ -8,7 +8,7 @@ module.exports = (err, req, res, next) => {
     errors: err.errors || undefined,
   };
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && statusCode !== 401) {
     payload.stack = err.stack;
   }
 

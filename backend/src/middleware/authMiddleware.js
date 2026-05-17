@@ -2,24 +2,44 @@
 const User = require('../models/User');
 const { verifyAccessToken } = require('../utils/generateToken');
 
+const createUnauthorizedError = () => new ApiError(401, 'Unauthorized');
+
+const parseBearerToken = (authorizationHeader) => {
+  if (!authorizationHeader) {
+    return { token: null, reason: 'missing_token' };
+  }
+
+  const parts = authorizationHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer' || !parts[1]) {
+    return { token: null, reason: 'malformed_token' };
+  }
+
+  return { token: parts[1], reason: null };
+};
+
 module.exports = async (req, res, next) => {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  const { token, reason } = parseBearerToken(req.headers.authorization || '');
 
   if (!token) {
-    return next(new ApiError(401, 'Authentication token missing'));
+    req.authErrorReason = reason;
+    return next(createUnauthorizedError());
   }
 
   try {
     const payload = verifyAccessToken(token);
     const user = await User.findById(payload.id).select('-password -refreshToken');
+
     if (!user) {
-      return next(new ApiError(401, 'User not found'));
+      return next(createUnauthorizedError());
     }
 
     req.user = { id: user._id, role: user.role, email: user.email, name: user.name };
     next();
   } catch (error) {
-    next(new ApiError(401, 'Invalid or expired access token'));
+    if (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError') {
+      return next(createUnauthorizedError());
+    }
+
+    next(createUnauthorizedError());
   }
 };

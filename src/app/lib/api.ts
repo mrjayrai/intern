@@ -1,4 +1,14 @@
-type ApiOptions = RequestInit & {
+import axios, {
+  AxiosError,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from 'axios';
+
+type ApiRequestConfig = AxiosRequestConfig & {
+  auth?: boolean;
+};
+
+type InternalApiRequestConfig = InternalAxiosRequestConfig & {
   auth?: boolean;
 };
 
@@ -13,6 +23,7 @@ export type UserRole =
 
 export type AuthUser = {
   id: string;
+  _id?: string;
   name: string;
   email: string;
   role: UserRole;
@@ -27,11 +38,28 @@ export type ApiResponse<T> = {
   success: boolean;
   data: T;
   message?: string;
+  errors?: string[];
 };
 
-const API_BASE_URL = ((import.meta as any).env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+export type ApiRecord = Record<string, unknown>;
+
+type StoredUser = Partial<AuthUser> & {
+  _id?: string;
+};
+
+const API_BASE_URL = ((import.meta as ImportMeta).env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const TOKEN_KEY = 'internflow_access_token';
 const USER_KEY = 'internflow_user';
+const AUTH_REDIRECT_EVENT = 'internflow:auth-redirect';
+
+let isRedirectingToLogin = false;
+
+class AuthRequiredError extends Error {
+  constructor() {
+    super('Authentication required');
+    this.name = 'AuthRequiredError';
+  }
+}
 
 export function getAccessToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -42,7 +70,14 @@ export function getStoredUser(): AuthUser | null {
   if (!storedUser) return null;
 
   try {
-    return JSON.parse(storedUser) as AuthUser;
+    const user = JSON.parse(storedUser) as StoredUser;
+    const id = user.id || user._id;
+    if (!id || !user.email || !user.role) {
+      clearSession();
+      return null;
+    }
+
+    return { ...user, id } as AuthUser;
   } catch {
     clearSession();
     return null;
@@ -53,14 +88,24 @@ export function getStoredSession(): AuthSession | null {
   const accessToken = getAccessToken();
   const user = getStoredUser();
 
-  if (!accessToken || !user) return null;
+  if (!accessToken || !user) {
+    clearSession();
+    return null;
+  }
 
   return { accessToken, user };
 }
 
+export function initializeAuthState() {
+  return getStoredSession();
+}
+
 export function setSession(accessToken: string, user: AuthUser) {
+  const normalizedUser = { ...user, id: user.id || user._id };
+
   localStorage.setItem(TOKEN_KEY, accessToken);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem(USER_KEY, JSON.stringify(normalizedUser));
+  isRedirectingToLogin = false;
 }
 
 export function clearSession() {
@@ -68,58 +113,126 @@ export function clearSession() {
   localStorage.removeItem(USER_KEY);
 }
 
-export async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { auth = true, headers, ...requestOptions } = options;
+function redirectToLogin() {
+  if (isRedirectingToLogin || window.location.pathname === '/login') return;
+
+  isRedirectingToLogin = true;
+  window.dispatchEvent(new Event(AUTH_REDIRECT_EVENT));
+  window.location.assign('/login');
+}
+
+export function clearSessionAndRedirect() {
+  clearSession();
+  redirectToLogin();
+}
+
+export async function logoutAndRedirect() {
   const token = getAccessToken();
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
-    ...requestOptions,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-  });
+  try {
+    if (token) {
+      await apiClient.post('/api/auth/logout', undefined, { auth: false });
+    }
+  } finally {
+    clearSessionAndRedirect();
+  }
+}
 
-  const payload = await response.json().catch(() => null);
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL || undefined,
+  withCredentials: false,
+});
 
-  if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message || `Request failed with status ${response.status}`);
+apiClient.interceptors.request.use((config: InternalApiRequestConfig) => {
+  const requiresAuth = config.auth !== false;
+
+  if (!requiresAuth) {
+    return config;
   }
 
-  return (payload?.data ?? payload) as T;
+  const token = getAccessToken();
+  if (!token) {
+    throw new AuthRequiredError();
+  }
+
+  config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError<ApiResponse<unknown>> | AuthRequiredError) => {
+    if (error instanceof AuthRequiredError) {
+      clearSessionAndRedirect();
+      return Promise.reject(error);
+    }
+
+    const status = error.response?.status;
+    const requestUrl = error.config?.url || '';
+    const isLoginRequest = requestUrl.includes('/api/auth/login');
+
+    if (status === 401 && !isLoginRequest) {
+      clearSessionAndRedirect();
+    }
+
+    return Promise.reject(error);
+  },
+);
+
+export async function apiRequest<T>(path: string, options: ApiRequestConfig = {}): Promise<T> {
+  try {
+    const response = await apiClient.request<ApiResponse<T> | T>({
+      url: path,
+      ...options,
+    });
+    const payload = response.data;
+
+    if (payload && typeof payload === 'object' && 'success' in payload) {
+      const apiPayload = payload as ApiResponse<T>;
+      if (apiPayload.success === false) {
+        throw new Error(apiPayload.message || 'Request failed');
+      }
+
+      return apiPayload.data;
+    }
+
+    return payload as T;
+  } catch (error) {
+    if (axios.isAxiosError<ApiResponse<unknown>>(error)) {
+      const message = error.response?.data?.message || error.message || 'Request failed';
+      throw new Error(message);
+    }
+
+    throw error;
+  }
 }
 
 export const api = {
   login: (email: string, password: string) =>
-    apiRequest<AuthSession>(
-      '/api/auth/login',
-      {
-        auth: false,
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      }
-    ),
+    apiRequest<AuthSession>('/api/auth/login', {
+      auth: false,
+      method: 'POST',
+      data: { email, password },
+    }),
   logout: () => apiRequest('/api/auth/logout', { method: 'POST' }),
-  dashboard: () => apiRequest<any>('/api/dashboard'),
-  referrals: () => apiRequest<any[]>('/api/referrals'),
-  createReferral: (data: unknown) =>
+  dashboard: <T = ApiRecord>() => apiRequest<T>('/api/dashboard'),
+  referrals: <T = ApiRecord[]>() => apiRequest<T>('/api/referrals'),
+  createReferral: (data: FormData) =>
     apiRequest('/api/referrals', {
       method: 'POST',
-      body: JSON.stringify(data),
+      data,
     }),
-  ndas: () => apiRequest<any[]>('/api/nda'),
-  submitNda: (data: unknown) =>
+  ndas: <T = ApiRecord[]>() => apiRequest<T>('/api/nda'),
+  submitNda: (data: ApiRecord) =>
     apiRequest('/api/nda', {
       method: 'POST',
-      body: JSON.stringify(data),
+      data,
     }),
-  certificates: () => apiRequest<any[]>('/api/certificates'),
-  issueCertificate: (data: unknown) =>
+  certificates: <T = ApiRecord[]>() => apiRequest<T>('/api/certificates'),
+  issueCertificate: (data: ApiRecord) =>
     apiRequest('/api/certificates', {
       method: 'POST',
-      body: JSON.stringify(data),
+      data,
     }),
-  notifications: () => apiRequest<any[]>('/api/notifications'),
+  notifications: <T = ApiRecord[]>() => apiRequest<T>('/api/notifications'),
 };

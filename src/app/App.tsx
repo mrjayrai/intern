@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { RoleRoute } from './components/auth/RoleRoute';
+import { initializeAuthState } from './lib/api';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Referrals } from './pages/Referrals';
@@ -17,6 +19,10 @@ import { AIAssistant } from './pages/AIAssistant';
 import { Placeholder } from './pages/Placeholder';
 
 export default function App() {
+  useEffect(() => {
+    initializeAuthState();
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

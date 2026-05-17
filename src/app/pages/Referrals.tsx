@@ -3,6 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 import { api } from '../lib/api';
 import {
   Plus,
@@ -39,6 +47,18 @@ type Referral = {
   duplicate?: boolean;
 };
 
+type ReferralFormData = {
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone: string;
+  skills: string;
+  education: string;
+  internshipDuration: string;
+  projectOverview: string;
+  location: string;
+  resume: File | null;
+};
+
 const statusConfig = {
   pending_review: { label: 'Pending Review', variant: 'warning' as const, icon: Clock },
   approved: { label: 'Approved', variant: 'success' as const, icon: CheckCircle },
@@ -46,10 +66,31 @@ const statusConfig = {
   rejected: { label: 'Rejected', variant: 'error' as const, icon: XCircle },
 };
 
+const initialReferralForm: ReferralFormData = {
+  candidateName: '',
+  candidateEmail: '',
+  candidatePhone: '',
+  skills: '',
+  education: '',
+  internshipDuration: '',
+  projectOverview: '',
+  location: '',
+  resume: null,
+};
+
 export function Referrals() {
   const [searchTerm, setSearchTerm] = useState('');
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [statusMessage, setStatusMessage] = useState('Loading referrals...');
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [formData, setFormData] = useState<ReferralFormData>(initialReferralForm);
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const applyReferrals = (data: Referral[]) => {
+    setReferrals(data);
+    setStatusMessage(data.length ? 'Synced with backend' : 'No referrals found');
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -57,8 +98,7 @@ export function Referrals() {
     api.referrals()
       .then((data) => {
         if (!isMounted) return;
-        setReferrals(data);
-        setStatusMessage(data.length ? 'Synced with backend' : 'No referrals found');
+        applyReferrals(data);
       })
       .catch((err) => {
         if (!isMounted) return;
@@ -87,6 +127,49 @@ export function Referrals() {
       .some((value) => String(value).toLowerCase().includes(query));
   });
 
+  const updateFormField = (field: keyof ReferralFormData, value: string) => {
+    setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateResumeFile = (file: File | null) => {
+    setFormData((current) => ({ ...current, resume: file }));
+  };
+
+  const handleCreateReferral = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFormError('');
+
+    if (!formData.candidateName.trim() || !formData.candidateEmail.trim() || !formData.candidatePhone.trim()) {
+      setFormError('Candidate name, email, and phone are required.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const payload = new FormData();
+      payload.append('candidateName', formData.candidateName.trim());
+      payload.append('candidateEmail', formData.candidateEmail.trim());
+      payload.append('candidatePhone', formData.candidatePhone.trim());
+      if (formData.skills.trim()) payload.append('skills', formData.skills.trim());
+      if (formData.education.trim()) payload.append('education', formData.education.trim());
+      if (formData.internshipDuration.trim()) payload.append('internshipDuration', formData.internshipDuration.trim());
+      if (formData.projectOverview.trim()) payload.append('projectOverview', formData.projectOverview.trim());
+      if (formData.location.trim()) payload.append('location', formData.location.trim());
+      if (formData.resume) payload.append('resume', formData.resume);
+
+      await api.createReferral(payload);
+      const referralsData = await api.referrals();
+      applyReferrals(referralsData);
+      setFormData(initialReferralForm);
+      setIsCreateOpen(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Unable to create referral');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 p-8">
       <div className="flex items-center justify-between">
@@ -96,7 +179,7 @@ export function Referrals() {
             Manage candidate referrals and intake process. {statusMessage}
           </p>
         </div>
-        <Button variant="primary" className="gap-2">
+        <Button variant="primary" className="gap-2" onClick={() => setIsCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           New Referral
         </Button>
@@ -235,6 +318,149 @@ export function Referrals() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>New Referral</DialogTitle>
+            <DialogDescription>
+              Add candidate details and submit the referral to the workflow.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-5" onSubmit={handleCreateReferral}>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="candidateName" className="text-sm font-medium">
+                  Candidate name
+                </label>
+                <Input
+                  id="candidateName"
+                  value={formData.candidateName}
+                  onChange={(event) => updateFormField('candidateName', event.target.value)}
+                  placeholder="Full name"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="candidateEmail" className="text-sm font-medium">
+                  Candidate email
+                </label>
+                <Input
+                  id="candidateEmail"
+                  type="email"
+                  value={formData.candidateEmail}
+                  onChange={(event) => updateFormField('candidateEmail', event.target.value)}
+                  placeholder="candidate@company.com"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="candidatePhone" className="text-sm font-medium">
+                  Phone
+                </label>
+                <Input
+                  id="candidatePhone"
+                  value={formData.candidatePhone}
+                  onChange={(event) => updateFormField('candidatePhone', event.target.value)}
+                  placeholder="+91 98765 43210"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="location" className="text-sm font-medium">
+                  Location
+                </label>
+                <Input
+                  id="location"
+                  value={formData.location}
+                  onChange={(event) => updateFormField('location', event.target.value)}
+                  placeholder="Bengaluru"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="skills" className="text-sm font-medium">
+                  Skills
+                </label>
+                <Input
+                  id="skills"
+                  value={formData.skills}
+                  onChange={(event) => updateFormField('skills', event.target.value)}
+                  placeholder="React, TypeScript, Node.js"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="education" className="text-sm font-medium">
+                  Education
+                </label>
+                <Input
+                  id="education"
+                  value={formData.education}
+                  onChange={(event) => updateFormField('education', event.target.value)}
+                  placeholder="B.Tech Computer Science"
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label htmlFor="internshipDuration" className="text-sm font-medium">
+                  Internship duration
+                </label>
+                <Input
+                  id="internshipDuration"
+                  value={formData.internshipDuration}
+                  onChange={(event) => updateFormField('internshipDuration', event.target.value)}
+                  placeholder="Jun 2026 - Aug 2026"
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label htmlFor="resume" className="text-sm font-medium">
+                  Resume
+                </label>
+                <Input
+                  id="resume"
+                  type="file"
+                  accept=".pdf,.docx"
+                  onChange={(event) => updateResumeFile(event.target.files?.[0] || null)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Upload a PDF or DOCX resume up to 5 MB.
+                </p>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label htmlFor="projectOverview" className="text-sm font-medium">
+                  Project overview
+                </label>
+                <textarea
+                  id="projectOverview"
+                  value={formData.projectOverview}
+                  onChange={(event) => updateFormField('projectOverview', event.target.value)}
+                  className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  placeholder="Briefly describe the internship project"
+                />
+              </div>
+            </div>
+
+            {formError && (
+              <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {formError}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={isSubmitting}>
+                {isSubmitting ? 'Submitting...' : 'Submit Referral'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

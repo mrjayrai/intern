@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom';
+import { Button } from './ui/Button';
+import { getStoredUser, logoutAndRedirect } from '../lib/api';
 import {
   LayoutDashboard,
   UserPlus,
@@ -10,6 +12,7 @@ import {
   Activity,
   Award,
   BarChart3,
+  LogOut,
   Sparkles,
   Settings
 } from 'lucide-react';
@@ -30,6 +33,16 @@ const navigation = [
 ];
 
 export function Sidebar() {
+  const user = getStoredUser();
+  const initials = user?.name
+    ? user.name
+        .split(' ')
+        .map((part) => part[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'IF';
+
   return (
     <div className="flex h-full w-64 flex-col bg-[#1e293b] text-white">
       <div className="flex h-16 items-center justify-center border-b border-[#334155] px-6">
@@ -66,12 +79,22 @@ export function Sidebar() {
       <div className="border-t border-[#334155] p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#3b82f6]">
-            <span className="text-sm font-semibold">JD</span>
+            <span className="text-sm font-semibold">{initials}</span>
           </div>
-          <div>
-            <p className="text-sm font-medium">John Doe</p>
-            <p className="text-xs text-slate-400">Program Manager</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{user?.name || 'Intern Flow'}</p>
+            <p className="truncate text-xs text-slate-400">{user?.role || 'User'}</p>
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 w-9 p-0 text-slate-300 hover:bg-[#334155] hover:text-white"
+            onClick={logoutAndRedirect}
+            aria-label="Logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </div>
