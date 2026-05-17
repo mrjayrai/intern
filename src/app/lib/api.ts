@@ -251,6 +251,15 @@ export const api = {
       method: 'POST',
       data,
     }),
+  updateReferral: (id: string, data: FormData) =>
+    apiRequest(`/api/referrals/${id}`, {
+      method: 'PUT',
+      data,
+    }),
+  deleteReferral: (id: string) =>
+    apiRequest(`/api/referrals/${id}`, {
+      method: 'DELETE',
+    }),
   parseResume: (data: FormData, onUploadProgress?: ApiRequestConfig['onUploadProgress']) =>
     apiRequest<ResumeParseResult>('/api/resumes/parse', {
       method: 'POST',

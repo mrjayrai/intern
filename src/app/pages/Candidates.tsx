@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -17,8 +18,34 @@ import {
   Sparkles
 } from 'lucide-react';
 
+type ReferralCandidateState = {
+  referral?: {
+    id?: string;
+    _id?: string;
+    name?: string;
+    candidateName?: string;
+    email?: string;
+    candidateEmail?: string;
+    phone?: string;
+    candidatePhone?: string;
+    department?: string;
+    location?: string;
+    skills?: string[];
+    education?: string;
+    internshipDuration?: string;
+    projectOverview?: string;
+    status?: string;
+    workflowStage?: string;
+    createdAt?: string;
+    submittedDate?: string;
+    aiScore?: number;
+  };
+};
+
 export function Candidates() {
-  const candidate = {
+  const location = useLocation();
+  const referral = (location.state as ReferralCandidateState | null)?.referral;
+  const fallbackCandidate = {
     name: 'Sarah Chen',
     email: 'sarah.chen@email.com',
     phone: '+1 (555) 123-4567',
@@ -63,6 +90,53 @@ export function Candidates() {
     aiSummary: 'Strong technical background with relevant internship experience. Excellent academic performance and demonstrated proficiency in required tech stack. High match for Software Engineering internship role (95% confidence).',
     riskFlags: [],
   };
+  const candidate = referral
+    ? {
+        ...fallbackCandidate,
+        name: referral.name || referral.candidateName || 'Unknown candidate',
+        email: referral.email || referral.candidateEmail || '-',
+        phone: referral.phone || referral.candidatePhone || '-',
+        location: referral.location || '-',
+        department: referral.department || referral.location || '-',
+        skills: referral.skills?.length ? referral.skills : [],
+        education: referral.education
+          ? [
+              {
+                degree: referral.education,
+                school: 'From referral profile',
+                year: '-',
+                gpa: '-',
+              },
+            ]
+          : [],
+        startDate: referral.createdAt || referral.submittedDate || '-',
+        endDate: referral.internshipDuration || '-',
+        aiSummary:
+          referral.projectOverview ||
+          `Referral profile for ${referral.name || referral.candidateName || 'this candidate'} is available from the referral workflow.`,
+        timeline: [
+          {
+            stage: 'Referral Submitted',
+            date: referral.submittedDate || referral.createdAt || '-',
+            status: 'completed',
+          },
+          {
+            stage: referral.workflowStage || referral.status || 'Review',
+            date: 'Current',
+            status: 'in_progress',
+          },
+        ],
+        documents: [],
+        riskFlags: [],
+        matchScore: referral.aiScore ?? 0,
+      }
+    : { ...fallbackCandidate, matchScore: 95 };
+  const initials = candidate.name
+    .split(' ')
+    .map((name) => name[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <div className="space-y-6 p-8">
@@ -88,7 +162,7 @@ export function Candidates() {
             <CardContent className="space-y-6">
               <div className="flex items-start gap-4">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-100 text-2xl font-bold text-blue-700">
-                  SC
+                  {initials || 'CN'}
                 </div>
                 <div className="flex-1">
                   <h2 className="text-2xl font-bold">{candidate.name}</h2>
@@ -99,6 +173,9 @@ export function Candidates() {
                         {skill}
                       </Badge>
                     ))}
+                    {!candidate.skills.length && (
+                      <span className="text-sm text-muted-foreground">No skills listed</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -158,7 +235,7 @@ export function Candidates() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {candidate.education.map((edu, index) => (
+              {candidate.education.length ? candidate.education.map((edu, index) => (
                 <div key={index} className="border-l-2 border-blue-500 pl-4">
                   <h4 className="font-semibold">{edu.degree}</h4>
                   <p className="text-sm text-muted-foreground">{edu.school}</p>
@@ -166,7 +243,9 @@ export function Candidates() {
                     {edu.year} • GPA: {edu.gpa}
                   </p>
                 </div>
-              ))}
+              )) : (
+                <p className="text-sm text-muted-foreground">No education details available.</p>
+              )}
             </CardContent>
           </Card>
 
@@ -239,10 +318,10 @@ export function Candidates() {
               <div className="mt-4 rounded-lg bg-white p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Match Score</span>
-                  <span className="text-lg font-bold text-purple-600">95%</span>
+                  <span className="text-lg font-bold text-purple-600">{candidate.matchScore}%</span>
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-purple-200">
-                  <div className="h-full w-[95%] bg-purple-600" />
+                  <div className="h-full bg-purple-600" style={{ width: `${candidate.matchScore}%` }} />
                 </div>
               </div>
             </CardContent>

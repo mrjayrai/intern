@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -28,7 +29,9 @@ import {
   Trash2,
   UploadCloud,
   AlertTriangle,
-  Loader2
+  Loader2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 type Referral = {
@@ -51,6 +54,9 @@ type Referral = {
   createdAt?: string;
   aiScore?: number;
   duplicate?: boolean;
+  education?: string;
+  internshipDuration?: string;
+  projectOverview?: string;
 };
 
 type ReferralFormData = {
@@ -112,13 +118,17 @@ export function Referrals() {
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [statusMessage, setStatusMessage] = useState('Loading referrals...');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingReferralId, setEditingReferralId] = useState<string | null>(null);
+  const [expandedSkillsReferralId, setExpandedSkillsReferralId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ReferralFormData>(initialReferralForm);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingReferralId, setDeletingReferralId] = useState<string | null>(null);
   const [isParsingResume, setIsParsingResume] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [parsingProgress, setParsingProgress] = useState(0);
   const [aiParse, setAiParse] = useState<AiParseState>(initialAiParseState);
+  const navigate = useNavigate();
 
   const applyReferrals = (data: Referral[]) => {
     setReferrals(data);
@@ -162,6 +172,51 @@ export function Referrals() {
 
   const updateFormField = (field: keyof ReferralFormData, value: string) => {
     setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const getReferralId = (referral: Referral) => referral.id || referral._id || '';
+
+  const openCandidateProfile = (referral: Referral) => {
+    const referralId = getReferralId(referral);
+    navigate(referralId ? `/candidates?referralId=${referralId}` : '/candidates', {
+      state: { referral },
+    });
+  };
+
+  const openCreateReferral = () => {
+    setEditingReferralId(null);
+    setFormData(initialReferralForm);
+    setAiParse(initialAiParseState);
+    setUploadProgress(0);
+    setParsingProgress(0);
+    setFormError('');
+    setIsCreateOpen(true);
+  };
+
+  const openEditReferral = (referral: Referral) => {
+    const referralId = getReferralId(referral);
+    if (!referralId) {
+      setFormError('Unable to edit referral without an ID.');
+      return;
+    }
+
+    setEditingReferralId(referralId);
+    setFormData({
+      candidateName: referral.name || referral.candidateName || '',
+      candidateEmail: referral.email || referral.candidateEmail || '',
+      candidatePhone: referral.phone || referral.candidatePhone || '',
+      skills: (referral.skills || []).join(', '),
+      education: '',
+      internshipDuration: '',
+      projectOverview: '',
+      location: referral.location || referral.department || '',
+      resume: null,
+    });
+    setAiParse(initialAiParseState);
+    setUploadProgress(0);
+    setParsingProgress(0);
+    setFormError('');
+    setIsCreateOpen(true);
   };
 
   const updateResumeFile = async (file: File | null) => {
@@ -244,10 +299,15 @@ export function Referrals() {
       if (formData.location.trim()) payload.append('location', formData.location.trim());
       if (formData.resume) payload.append('resume', formData.resume);
 
-      await api.createReferral(payload);
+      if (editingReferralId) {
+        await api.updateReferral(editingReferralId, payload);
+      } else {
+        await api.createReferral(payload);
+      }
       const referralsData = await api.referrals();
       applyReferrals(referralsData);
       setFormData(initialReferralForm);
+      setEditingReferralId(null);
       setAiParse(initialAiParseState);
       setUploadProgress(0);
       setParsingProgress(0);
@@ -256,6 +316,29 @@ export function Referrals() {
       setFormError(err instanceof Error ? err.message : 'Unable to create referral');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteReferral = async (referral: Referral) => {
+    const referralId = getReferralId(referral);
+    if (!referralId) {
+      setStatusMessage('Unable to delete referral without an ID');
+      return;
+    }
+
+    const candidateName = referral.name || referral.candidateName || 'this referral';
+    if (!window.confirm(`Delete ${candidateName}? This cannot be undone.`)) return;
+
+    setDeletingReferralId(referralId);
+
+    try {
+      await api.deleteReferral(referralId);
+      const referralsData = await api.referrals();
+      applyReferrals(referralsData);
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : 'Unable to delete referral');
+    } finally {
+      setDeletingReferralId(null);
     }
   };
 
@@ -268,7 +351,7 @@ export function Referrals() {
             Manage candidate referrals and intake process. {statusMessage}
           </p>
         </div>
-        <Button variant="primary" className="gap-2" onClick={() => setIsCreateOpen(true)}>
+        <Button variant="primary" className="gap-2" onClick={openCreateReferral}>
           <Plus className="h-4 w-4" />
           New Referral
         </Button>
@@ -344,17 +427,43 @@ export function Referrals() {
                         <Badge variant="default">{department}</Badge>
                       </td>
                       <td className="py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {(referral.skills || []).slice(0, 2).map((skill) => (
-                            <Badge key={skill} variant="info" className="text-xs">
-                              {skill}
-                            </Badge>
-                          ))}
-                          {(referral.skills || []).length > 2 && (
-                            <Badge variant="info" className="text-xs">
-                              +{(referral.skills || []).length - 2}
-                            </Badge>
-                          )}
+                        <div className="flex max-w-[14rem] flex-wrap gap-1">
+                          {(() => {
+                            const referralId = getReferralId(referral);
+                            const skills = referral.skills || [];
+                            const isExpanded = expandedSkillsReferralId === referralId;
+                            const visibleSkills = isExpanded ? skills : skills.slice(0, 2);
+
+                            return (
+                              <>
+                                {visibleSkills.map((skill) => (
+                                  <Badge key={skill} variant="info" className="max-w-full truncate text-xs">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                                {skills.length > 2 && (
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-6 items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                                    onClick={() => setExpandedSkillsReferralId(isExpanded ? null : referralId)}
+                                  >
+                                    {isExpanded ? (
+                                      <>
+                                        Show less <ChevronUp className="h-3 w-3" />
+                                      </>
+                                    ) : (
+                                      <>
+                                        +{skills.length - 2} more <ChevronDown className="h-3 w-3" />
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                                {!skills.length && (
+                                  <span className="text-xs text-muted-foreground">-</span>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="py-4">
@@ -383,14 +492,24 @@ export function Referrals() {
                       <td className="py-4 text-muted-foreground">{submittedDate}</td>
                       <td className="py-4">
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" title="View candidate profile" onClick={() => openCandidateProfile(referral)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" title="Edit referral" onClick={() => openEditReferral(referral)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm">
-                            <Trash2 className="h-4 w-4 text-red-600" />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Delete referral"
+                            disabled={deletingReferralId === getReferralId(referral)}
+                            onClick={() => void handleDeleteReferral(referral)}
+                          >
+                            {deletingReferralId === getReferralId(referral) ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-red-600" />
+                            ) : (
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            )}
                           </Button>
                         </div>
                       </td>
@@ -414,14 +533,17 @@ export function Referrals() {
           setIsCreateOpen(open);
           if (!open) {
             setFormError('');
+            setEditingReferralId(null);
           }
         }}
       >
         <DialogContent className="grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
           <DialogHeader className="px-4 pb-3 pt-5 sm:px-6">
-            <DialogTitle>New Referral</DialogTitle>
+            <DialogTitle>{editingReferralId ? 'Edit Referral' : 'New Referral'}</DialogTitle>
             <DialogDescription>
-              Add candidate details and submit the referral to the workflow.
+              {editingReferralId
+                ? 'Update candidate details and save the referral.'
+                : 'Add candidate details and submit the referral to the workflow.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -606,12 +728,21 @@ export function Referrals() {
               </Button>
               <Button type="submit" variant="primary" disabled={isSubmitting || isParsingResume}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSubmitting ? 'Submitting...' : isParsingResume ? 'Parsing resume...' : 'Submit Referral'}
+                {isSubmitting
+                  ? editingReferralId
+                    ? 'Saving...'
+                    : 'Submitting...'
+                  : isParsingResume
+                  ? 'Parsing resume...'
+                  : editingReferralId
+                  ? 'Save Changes'
+                  : 'Submit Referral'}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
