@@ -12,6 +12,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const ndaRoutes = require('./routes/ndaRoutes');
 const certificateRoutes = require('./routes/certificateRoutes');
+const emailRoutes = require('./routes/emailRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const constants = require('./config/constants');
 
@@ -47,6 +48,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/nda', ndaRoutes);
 app.use('/api/certificates', certificateRoutes);
+app.use('/api/emails', emailRoutes);
 
 app.use((req, res, next) => {
   const error = new Error(`Not Found - ${req.originalUrl}`);

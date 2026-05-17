@@ -2,6 +2,7 @@
 const User = require('../models/User');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/generateToken');
 const { ROLES } = require('../constants/roles');
+const emailService = require('./emailService');
 
 const buildUserPayload = ({ name, email, password, role }) => ({
   name,
@@ -31,6 +32,15 @@ const registerUser = async (payload) => {
   const tokens = buildAuthTokens(user);
   user.refreshToken = tokens.refreshToken;
   await user.save();
+
+  // enqueue welcome email (non-blocking)
+  try {
+    await emailService.enqueueEmail(user.email, 'welcome', { name: user.name });
+  } catch (err) {
+    // don't block user registration for email failures; log to console for now
+    // In production, consider audit logging
+    console.error('Failed to enqueue welcome email', err?.message || err);
+  }
 
   return {
     user: user.toJSON(),
