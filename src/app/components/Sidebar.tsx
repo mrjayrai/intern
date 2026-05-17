@@ -20,7 +20,7 @@ import {
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
   { name: 'Referrals', to: '/referrals', icon: UserPlus },
-  { name: 'Candidates', to: '/candidates', icon: Users },
+  // { name: 'Candidates', to: '/candidates', icon: Users },
   { name: 'Onboarding', to: '/onboarding', icon: ClipboardCheck },
   { name: 'NDA & Documents', to: '/documents', icon: FileText },
   { name: 'Non-Worker IDs', to: '/ids', icon: IdCard },

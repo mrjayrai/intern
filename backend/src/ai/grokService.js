@@ -44,8 +44,49 @@ const parseResumeText = async (text) => {
           messages: [
             {
               role: "system",
-              content:
-                "Extract resume data and return ONLY raw JSON. Do not use markdown. Do not use code blocks.",
+              content: `You are an enterprise resume parsing system.
+
+Analyze the provided resume text and extract structured candidate information.
+
+Return ONLY valid raw JSON.
+Do NOT use markdown.
+Do NOT use code blocks.
+Do NOT add explanations.
+Do NOT add extra text before or after JSON.
+
+Required JSON structure:
+
+{
+  "fullName": "",
+  "email": "",
+  "phone": "",
+  "location": "",
+  "skills": [],
+  "education": [],
+  "experience": [],
+  "projects": [],
+  "certifications": [],
+  "linkedin": "",
+  "github": "",
+  "portfolio": "",
+  "summary": "",
+  "totalExperienceYears": 0,
+  "confidenceScore": 0
+}
+
+Rules:
+- skills must be an array of strings
+- education must be an array of objects
+- experience must be an array of objects
+- confidenceScore must be between 0 and 100
+- If information is unavailable, return empty string, empty array, or 0
+- Infer totalExperienceYears if possible
+- Normalize phone numbers
+- Normalize email formatting
+- Extract technical skills separately from soft skills when possible
+- Keep JSON schema valid at all times
+
+Return ONLY JSON.`,
             },
             {
               role: "user",
@@ -63,27 +104,22 @@ const parseResumeText = async (text) => {
         }
       );
 
-      const content =
-  response.data.choices[0].message.content;
+      const content = response.data?.choices?.[0]?.message?.content;
+      if (!content) {
+        throw new ApiError(500, 'Grok API returned unexpected response');
+      }
 
-let cleanedContent = content
-  .replace(/```json/g, "")
-  .replace(/```/g, "")
-  .trim();
+      const cleanedContent = content
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
 
-try {
-  return JSON.parse(cleanedContent);
-} catch (parseError) {
-  console.error(
-    "Failed to parse AI JSON:",
-    cleanedContent
-  );
-
-  throw new ApiError(
-    500,
-    "AI returned invalid JSON response"
-  );
-}
+      try {
+        return JSON.parse(cleanedContent);
+      } catch (parseError) {
+        console.error('Failed to parse AI JSON:', cleanedContent);
+        throw new ApiError(500, 'AI returned invalid JSON response');
+      }
     } catch (error) {
       lastError = error;
 
