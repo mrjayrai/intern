@@ -1,0 +1,97 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# next.js
+/.next/
+/out/
+/build/
+
+# production
+/dist
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# vercel
+.vercel
+
+# turbo
+.turbo
+
+# cache
+.cache
+.parcel-cache
+
+# testing
+/coverage
+
+# misc
+.DS_Store
+Thumbs.db
+
+# IDEs & editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# uploads/temp
+/uploads
+/temp
+
+# generated files
+*.log
+*.tmp
+
+# lock files (optional — keep if working in team)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# OS files
+ehthumbs.db
+Desktop.ini
+
+# local config
+.local
+
+# eslint cache
+.eslintcache
+
+# stylelint cache
+.stylelintcache
+
+# storybook
+storybook-static
+
+# playwright
+/playwright-report
+/test-results
+
+# cypress
+/cypress/videos
+/cypress/screenshots
+
+# dotenv backups
+.env.backup
+.env.*
+
+# generated certificates or exports
+/public/generated
+/public/exports
