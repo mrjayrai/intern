@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
+import { api } from '../lib/api';
 import {
   Plus,
   Search,
@@ -17,7 +18,7 @@ import {
   Trash2
 } from 'lucide-react';
 
-const referrals = [
+const fallbackReferrals = [
   {
     id: 1,
     name: 'Sarah Chen',
@@ -81,6 +82,35 @@ const statusConfig = {
 
 export function Referrals() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [referrals, setReferrals] = useState(fallbackReferrals);
+  const [statusMessage, setStatusMessage] = useState('Loading referrals...');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    api.referrals()
+      .then((data) => {
+        if (!isMounted) return;
+        setReferrals(data.length ? data : fallbackReferrals);
+        setStatusMessage(data.length ? 'Synced with backend' : 'Backend returned no referrals; showing sample data');
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setReferrals(fallbackReferrals);
+        setStatusMessage(err instanceof Error ? err.message : 'Unable to load referrals');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const visibleReferrals = referrals.filter((referral) => {
+    const query = searchTerm.toLowerCase();
+    return [referral.name, referral.email, referral.department, referral.submittedBy]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
 
   return (
     <div className="space-y-6 p-8">
@@ -88,7 +118,7 @@ export function Referrals() {
         <div>
           <h1 className="text-3xl font-bold">Referrals</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage candidate referrals and intake process
+            Manage candidate referrals and intake process. {statusMessage}
           </p>
         </div>
         <Button variant="primary" className="gap-2">
@@ -133,8 +163,8 @@ export function Referrals() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {referrals.map((referral) => {
-                  const statusInfo = statusConfig[referral.status];
+                {visibleReferrals.map((referral) => {
+                  const statusInfo = statusConfig[referral.status as keyof typeof statusConfig] || statusConfig.pending_review;
                   const StatusIcon = statusInfo.icon;
 
                   return (
@@ -161,14 +191,14 @@ export function Referrals() {
                       </td>
                       <td className="py-4">
                         <div className="flex flex-wrap gap-1">
-                          {referral.skills.slice(0, 2).map((skill) => (
+                          {(referral.skills || []).slice(0, 2).map((skill) => (
                             <Badge key={skill} variant="info" className="text-xs">
                               {skill}
                             </Badge>
                           ))}
-                          {referral.skills.length > 2 && (
+                          {(referral.skills || []).length > 2 && (
                             <Badge variant="info" className="text-xs">
-                              +{referral.skills.length - 2}
+                              +{(referral.skills || []).length - 2}
                             </Badge>
                           )}
                         </div>

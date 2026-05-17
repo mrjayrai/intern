@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { MetricCard } from '../components/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { api } from '../lib/api';
 import {
   Users,
   ClipboardCheck,
@@ -18,7 +20,7 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 
-const funnelData = [
+const fallbackFunnelData = [
   { stage: 'Referrals', count: 450 },
   { stage: 'Screening', count: 320 },
   { stage: 'Onboarding', count: 180 },
@@ -26,7 +28,7 @@ const funnelData = [
   { stage: 'Completed', count: 89 },
 ];
 
-const trendData = [
+const fallbackTrendData = [
   { month: 'Jan', interns: 45 },
   { month: 'Feb', interns: 52 },
   { month: 'Mar', interns: 61 },
@@ -34,7 +36,7 @@ const trendData = [
   { month: 'May', interns: 89 },
 ];
 
-const departmentData = [
+const fallbackDepartmentData = [
   { name: 'Engineering', value: 45, color: '#3b82f6' },
   { name: 'Marketing', value: 28, color: '#10b981' },
   { name: 'Design', value: 18, color: '#8b5cf6' },
@@ -42,7 +44,7 @@ const departmentData = [
   { name: 'Operations', value: 12, color: '#ec4899' },
 ];
 
-const activities = [
+const fallbackActivities = [
   { id: 1, type: 'referral', message: 'New referral submitted by Sarah Chen', time: '2 minutes ago', icon: Users, color: 'text-blue-600' },
   { id: 2, type: 'nda', message: 'NDA signed by Michael Rodriguez', time: '15 minutes ago', icon: FileText, color: 'text-green-600' },
   { id: 3, type: 'id', message: 'AD account created for Emma Wilson', time: '1 hour ago', icon: IdCard, color: 'text-purple-600' },
@@ -50,7 +52,7 @@ const activities = [
   { id: 5, type: 'certificate', message: 'Certificate issued to Jordan Lee', time: '3 hours ago', icon: Award, color: 'text-emerald-600' },
 ];
 
-const aiInsights = [
+const fallbackAiInsights = [
   { id: 1, message: '3 interns may miss onboarding SLA deadline', severity: 'warning', action: 'View Details' },
   { id: 2, message: 'Duplicate candidate detected: John Smith', severity: 'error', action: 'Review' },
   { id: 3, message: 'Mentor response delayed for 2 candidates', severity: 'warning', action: 'Send Reminder' },
@@ -58,12 +60,43 @@ const aiInsights = [
 ];
 
 export function Dashboard() {
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    api.dashboard()
+      .then((data) => {
+        if (isMounted) setDashboard(data);
+      })
+      .catch(() => {
+        if (isMounted) setDashboard(null);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const stats = dashboard?.stats || {};
+  const funnelData = dashboard?.funnelData?.length ? dashboard.funnelData : fallbackFunnelData;
+  const trendData = dashboard?.trendData?.length ? dashboard.trendData : fallbackTrendData;
+  const departmentData = dashboard?.departmentData?.length ? dashboard.departmentData : fallbackDepartmentData;
+  const activities = dashboard?.timeline?.length ? dashboard.timeline : fallbackActivities;
+  const aiInsights = dashboard?.aiInsights?.length ? dashboard.aiInsights : fallbackAiInsights;
+
   return (
     <div className="space-y-6 p-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Welcome back! Here's your program overview.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {isLoading ? 'Loading the latest program overview...' : "Welcome back! Here's your program overview."}
+          </p>
         </div>
         <Button variant="ai" className="gap-2">
           <Sparkles className="h-4 w-4" />
@@ -74,32 +107,32 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Total Interns"
-          value="145"
-          change="+12% from last month"
+          value={stats.totalInterns ?? 145}
+          change={stats.totalInternsChange ?? '+12% from last month'}
           icon={Users}
           trend="up"
           color="bg-blue-500"
         />
         <MetricCard
           title="Pending Onboarding"
-          value="23"
-          change="5 due today"
+          value={stats.pendingOnboarding ?? 23}
+          change={stats.pendingOnboardingChange ?? '5 due today'}
           icon={ClipboardCheck}
           trend="neutral"
           color="bg-purple-500"
         />
         <MetricCard
           title="NDA Pending"
-          value="8"
-          change="2 overdue"
+          value={stats.ndaPending ?? 8}
+          change={stats.ndaPendingChange ?? '2 overdue'}
           icon={FileText}
           trend="down"
           color="bg-amber-500"
         />
         <MetricCard
           title="SLA Breaches"
-          value="3"
-          change="-2 from yesterday"
+          value={stats.slaBreaches ?? 3}
+          change={stats.slaBreachesChange ?? '-2 from yesterday'}
           icon={AlertTriangle}
           trend="up"
           color="bg-red-500"
@@ -114,19 +147,19 @@ export function Dashboard() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">IDs Created Today</span>
-              <Badge variant="success">12</Badge>
+              <Badge variant="success">{stats.idsCreatedToday ?? 12}</Badge>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Active Internships</span>
-              <Badge variant="info">145</Badge>
+              <Badge variant="info">{stats.activeInternships ?? 145}</Badge>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Certificates Pending</span>
-              <Badge variant="warning">7</Badge>
+              <Badge variant="warning">{stats.certificatesPending ?? 7}</Badge>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">AI Accuracy Score</span>
-              <Badge variant="purple">98.5%</Badge>
+              <Badge variant="purple">{stats.aiAccuracyScore ?? '98.5%'}</Badge>
             </div>
           </CardContent>
         </Card>
@@ -203,15 +236,21 @@ export function Dashboard() {
           <CardContent>
             <div className="space-y-4">
               {activities.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3 pb-3 last:pb-0">
-                  <div className={`mt-1 rounded-lg bg-opacity-10 p-2 ${activity.color.replace('text-', 'bg-')}`}>
-                    <activity.icon className={`h-4 w-4 ${activity.color}`} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{activity.message}</p>
-                    <p className="text-xs text-muted-foreground">{activity.time}</p>
-                  </div>
-                </div>
+                (() => {
+                  const ActivityIcon = activity.icon || Activity;
+
+                  return (
+                    <div key={activity.id || activity.message} className="flex items-start gap-3 pb-3 last:pb-0">
+                      <div className={`mt-1 rounded-lg bg-opacity-10 p-2 ${(activity.color || 'text-blue-600').replace('text-', 'bg-')}`}>
+                        <ActivityIcon className={`h-4 w-4 ${activity.color || 'text-blue-600'}`} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{activity.message}</p>
+                        <p className="text-xs text-muted-foreground">{activity.time}</p>
+                      </div>
+                    </div>
+                  );
+                })()
               ))}
             </div>
           </CardContent>

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { api } from '../lib/api';
 import {
   FileText,
   Search,
@@ -17,7 +18,7 @@ import {
   Send
 } from 'lucide-react';
 
-const documents = [
+const fallbackDocuments = [
   {
     id: 1,
     candidateName: 'Sarah Chen',
@@ -72,6 +73,39 @@ const statusConfig = {
 export function Documents() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [documents, setDocuments] = useState(fallbackDocuments);
+  const [statusMessage, setStatusMessage] = useState('Loading documents...');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    api.ndas()
+      .then((data) => {
+        if (!isMounted) return;
+        setDocuments(data.length ? data : fallbackDocuments);
+        setStatusMessage(data.length ? 'Synced with backend' : 'Backend returned no documents; showing sample data');
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setDocuments(fallbackDocuments);
+        setStatusMessage(err instanceof Error ? err.message : 'Unable to load documents');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const visibleDocuments = documents.filter((doc) => {
+    const query = searchTerm.toLowerCase();
+    return [doc.candidateName, doc.documentType, doc.status]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
+
+  const signedCount = documents.filter((doc) => doc.status === 'signed').length;
+  const pendingCount = documents.filter((doc) => doc.status === 'pending').length;
+  const overdueCount = documents.filter((doc) => doc.status === 'overdue').length;
 
   return (
     <div className="space-y-6 p-8">
@@ -79,7 +113,7 @@ export function Documents() {
         <div>
           <h1 className="text-3xl font-bold">NDA & Documents</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage legal documents and e-signatures
+            Manage legal documents and e-signatures. {statusMessage}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -100,7 +134,7 @@ export function Documents() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Documents</p>
-                <p className="mt-1 text-2xl font-bold">248</p>
+                <p className="mt-1 text-2xl font-bold">{documents.length}</p>
               </div>
               <FileText className="h-8 w-8 text-blue-500" />
             </div>
@@ -111,7 +145,7 @@ export function Documents() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Signed</p>
-                <p className="mt-1 text-2xl font-bold text-emerald-600">189</p>
+                <p className="mt-1 text-2xl font-bold text-emerald-600">{signedCount}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-emerald-500" />
             </div>
@@ -122,7 +156,7 @@ export function Documents() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="mt-1 text-2xl font-bold text-amber-600">45</p>
+                <p className="mt-1 text-2xl font-bold text-amber-600">{pendingCount}</p>
               </div>
               <Clock className="h-8 w-8 text-amber-500" />
             </div>
@@ -133,7 +167,7 @@ export function Documents() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Overdue</p>
-                <p className="mt-1 text-2xl font-bold text-red-600">14</p>
+                <p className="mt-1 text-2xl font-bold text-red-600">{overdueCount}</p>
               </div>
               <AlertCircle className="h-8 w-8 text-red-500" />
             </div>
@@ -176,8 +210,8 @@ export function Documents() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {documents.map((doc) => {
-                  const statusInfo = statusConfig[doc.status];
+                {visibleDocuments.map((doc) => {
+                  const statusInfo = statusConfig[doc.status as keyof typeof statusConfig] || statusConfig.pending;
                   const StatusIcon = statusInfo.icon;
 
                   return (

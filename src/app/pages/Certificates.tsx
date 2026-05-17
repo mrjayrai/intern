@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { api } from '../lib/api';
 import {
   Award,
   Search,
@@ -13,9 +14,9 @@ import {
   Calendar,
   User
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-const certificates = [
+const fallbackCertificates = [
   {
     id: 1,
     candidateName: 'Jordan Lee',
@@ -60,6 +61,38 @@ const statusConfig = {
 export function Certificates() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [certificates, setCertificates] = useState(fallbackCertificates);
+  const [statusMessage, setStatusMessage] = useState('Loading certificates...');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    api.certificates()
+      .then((data) => {
+        if (!isMounted) return;
+        setCertificates(data.length ? data : fallbackCertificates);
+        setStatusMessage(data.length ? 'Synced with backend' : 'Backend returned no certificates; showing sample data');
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setCertificates(fallbackCertificates);
+        setStatusMessage(err instanceof Error ? err.message : 'Unable to load certificates');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const visibleCertificates = certificates.filter((cert) => {
+    const query = searchTerm.toLowerCase();
+    return [cert.candidateName, cert.department, cert.mentor, cert.certificateNumber]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
+
+  const issuedCount = certificates.filter((cert) => cert.status === 'issued').length;
+  const pendingCount = certificates.filter((cert) => cert.status === 'pending_approval').length;
 
   return (
     <div className="space-y-6 p-8">
@@ -67,7 +100,7 @@ export function Certificates() {
         <div>
           <h1 className="text-3xl font-bold">Certificate Management</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Generate and issue internship completion certificates
+            Generate and issue internship completion certificates. {statusMessage}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -82,7 +115,7 @@ export function Certificates() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Issued</p>
-                <p className="mt-1 text-2xl font-bold">234</p>
+                <p className="mt-1 text-2xl font-bold">{issuedCount}</p>
               </div>
               <Award className="h-8 w-8 text-blue-500" />
             </div>
@@ -93,7 +126,7 @@ export function Certificates() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Pending Approval</p>
-                <p className="mt-1 text-2xl font-bold text-amber-600">12</p>
+                <p className="mt-1 text-2xl font-bold text-amber-600">{pendingCount}</p>
               </div>
               <Clock className="h-8 w-8 text-amber-500" />
             </div>
@@ -104,7 +137,7 @@ export function Certificates() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">This Month</p>
-                <p className="mt-1 text-2xl font-bold text-emerald-600">18</p>
+                <p className="mt-1 text-2xl font-bold text-emerald-600">{issuedCount}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-emerald-500" />
             </div>
@@ -153,8 +186,8 @@ export function Certificates() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {certificates.map((cert) => {
-                  const statusInfo = statusConfig[cert.status];
+                {visibleCertificates.map((cert) => {
+                  const statusInfo = statusConfig[cert.status as keyof typeof statusConfig] || statusConfig.in_progress;
                   const StatusIcon = statusInfo.icon;
 
                   return (

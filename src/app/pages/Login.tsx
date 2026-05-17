@@ -4,15 +4,29 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Sparkles, Mail, Lock, Building2 } from 'lucide-react';
+import { api, setSession } from '../lib/api';
 
 export function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/');
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      const session = await api.login(email, password);
+      setSession(session.accessToken, session.user);
+      navigate('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to sign in');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSSOLogin = () => {
@@ -63,7 +77,7 @@ export function Login() {
                   <Input
                     id="password"
                     type="password"
-                    placeholder="••••••••"
+                    placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10"
@@ -71,6 +85,11 @@ export function Login() {
                   />
                 </div>
               </div>
+              {error && (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <input
@@ -86,8 +105,8 @@ export function Login() {
                   Forgot password?
                 </a>
               </div>
-              <Button type="submit" className="w-full" variant="primary">
-                Sign in
+              <Button type="submit" className="w-full" variant="primary" disabled={isSubmitting}>
+                {isSubmitting ? 'Signing in...' : 'Sign in'}
               </Button>
             </form>
 
@@ -127,7 +146,7 @@ export function Login() {
         </Card>
 
         <p className="text-center text-xs text-gray-500">
-          Protected by enterprise security. © 2026 Intern Flow. All rights reserved.
+          Protected by enterprise security. Copyright 2026 Intern Flow. All rights reserved.
         </p>
       </div>
     </div>
