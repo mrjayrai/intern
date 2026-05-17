@@ -2,6 +2,7 @@
 const Referral = require('../models/Referral');
 const auditService = require('../services/auditService');
 const workflowService = require('../services/workflowService');
+const notificationService = require('../services/notificationService');
 const emailService = require('../services/emailService');
 
 const createReferral = async (data, actor = {}) => {
@@ -44,27 +45,40 @@ const createReferral = async (data, actor = {}) => {
   }
 
   if (referral.candidateEmail) {
-  console.log(
-    `Sending referral received email to ${referral.candidateEmail}`
-  );
+    console.log(`Sending referral received email to ${referral.candidateEmail}`);
 
-  emailService
-    .sendTemplate(
-      referral.candidateEmail,
-      "referralReceived",
-      {
-        name: referral.candidateName,
-        referralId: referral._id.toString(),
+    emailService
+      .sendTemplate(
+        referral.candidateEmail,
+        'referralReceived',
+        {
+          name: referral.candidateName,
+          referralId: referral._id.toString(),
+        },
+        { enqueue: false },
+      )
+      .catch((err) => {
+        console.error('Failed to send referral email:', err?.message || err);
+      });
+  }
+
+  try {
+    await notificationService.createNotification({
+      user: referral.referrer || actor.id,
+      title: 'Referral submitted',
+      message: `Referral for ${referral.candidateName} has been created and entered into workflow stage ${referral.workflowStage}.`,
+      type: 'REFERRAL',
+      workflowStage: referral.workflowStage,
+      metadata: {
+        referralId: referral._id,
+        candidateName: referral.candidateName,
       },
-      { enqueue: false }
-    )
-    .catch((err) => {
-      console.error(
-        "Failed to send referral email:",
-        err?.message || err
-      );
+      performedByName: actor.name || 'System',
+      performedById: actor.id,
     });
-}
+  } catch (notificationError) {
+    console.error('Failed to create referral notification:', notificationError?.message || notificationError);
+  }
 
   return referral;
 };

@@ -240,4 +240,13 @@ export const api = {
     }),
   certificateDownloadUrl: (id: string) => apiUrl(`/api/certificates/download/${id}`),
   notifications: <T = ApiRecord[]>() => apiRequest<T>('/api/notifications'),
+  notificationUnreadCount: <T = { unreadCount: number }>() => apiRequest<T>('/api/notifications/unread-count'),
+  markNotificationRead: <T = ApiRecord>(id: string) =>
+    apiRequest<T>(`/api/notifications/${id}/read`, {
+      method: 'PUT',
+    }),
+  markAllNotificationsRead: <T = ApiRecord>() =>
+    apiRequest<T>('/api/notifications/read-all', {
+      method: 'PUT',
+    }),
 };

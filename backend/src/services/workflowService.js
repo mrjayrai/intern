@@ -1,6 +1,7 @@
 const { WORKFLOW_TRANSITIONS, WORKFLOW_STAGES, WORKFLOW_SLA_DAYS } = require('../constants/workflowStages');
 const WorkflowHistory = require('../models/WorkflowHistory');
 const NDA = require('../models/NDA');
+const notificationService = require('./notificationService');
 const ApiError = require('../utils/apiError');
 
 const isValidStage = (stage) => Object.values(WORKFLOW_STAGES).includes(stage);
@@ -74,6 +75,29 @@ const transitionReferralStage = async (referral, nextStage, actor = {}, note = '
     note,
     slaDeadline,
   });
+
+  try {
+    const recipientId = referral.referrer || referral.mentor || actor.id;
+    if (recipientId) {
+      await notificationService.createNotification({
+        user: recipientId,
+        title: `Workflow updated to ${nextStage}`,
+        message: `Referral for ${referral.candidateName} moved from ${currentStage || 'NONE'} to ${nextStage}.`,
+        type: 'WORKFLOW',
+        workflowStage: nextStage,
+        metadata: {
+          referralId: referral._id,
+          fromStage: currentStage,
+          toStage: nextStage,
+          note,
+        },
+        performedByName: actor.name || 'System',
+        performedById: actor.id,
+      });
+    }
+  } catch (notificationError) {
+    console.error('Failed to create workflow notification:', notificationError?.message || notificationError);
+  }
 
   return referral;
 };
