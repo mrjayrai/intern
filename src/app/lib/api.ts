@@ -68,6 +68,57 @@ export type ResumeParseResult = {
   };
 };
 
+export type OnboardingAddress = {
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+};
+
+export type OnboardingGovernmentId = {
+  type?: string;
+  idNumber?: string;
+  documentPath?: string;
+};
+
+export type OnboardingEducation = {
+  institution?: string;
+  degree?: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  grade?: string;
+  notes?: string;
+};
+
+export type OnboardingPayload = {
+  candidateId?: string;
+  referralId?: string;
+  candidateEmail?: string;
+  candidateName?: string;
+  personalDetails?: ApiRecord;
+  emergencyContact?: ApiRecord;
+  permanentAddress?: OnboardingAddress;
+  currentAddress?: OnboardingAddress;
+  govtIds?: OnboardingGovernmentId[];
+  educationDetails?: OnboardingEducation[];
+  declarations?: ApiRecord;
+  status?: 'DRAFT' | 'SUBMITTED' | 'HR_APPROVED';
+  workflowStage?: string;
+};
+
+export type OnboardingFormRecord = OnboardingPayload & {
+  _id: string;
+  id?: string;
+  attachments?: ApiRecord[];
+  completionPercentage?: number;
+  status: 'DRAFT' | 'SUBMITTED' | 'HR_APPROVED';
+  submittedAt?: string;
+  updatedAt?: string;
+};
+
 type StoredUser = Partial<AuthUser> & {
   _id?: string;
 };
@@ -288,5 +339,25 @@ export const api = {
   markAllNotificationsRead: <T = ApiRecord>() =>
     apiRequest<T>('/api/notifications/read-all', {
       method: 'PUT',
+    }),
+  createOnboardingDraft: (data: FormData) =>
+    apiRequest<OnboardingFormRecord>('/api/onboarding', {
+      method: 'POST',
+      data,
+    }),
+  getOnboardingDraft: (id: string) =>
+    apiRequest<OnboardingFormRecord>(`/api/onboarding/${id}`),
+  updateOnboardingDraft: (id: string, data: FormData) =>
+    apiRequest<OnboardingFormRecord>(`/api/onboarding/${id}`, {
+      method: 'PUT',
+      data,
+    }),
+  deleteOnboardingDraft: (id: string) =>
+    apiRequest<{ id: string }>(`/api/onboarding/${id}`, {
+      method: 'DELETE',
+    }),
+  submitOnboarding: (id: string) =>
+    apiRequest<OnboardingFormRecord>(`/api/onboarding/${id}/submit`, {
+      method: 'POST',
     }),
 };

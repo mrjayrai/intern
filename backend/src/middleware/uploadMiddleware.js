@@ -4,8 +4,10 @@ const fs = require('fs');
 
 const resumeFolder = path.join(__dirname, '..', 'uploads', 'resumes');
 const ndaFolder = path.join(__dirname, '..', 'uploads', 'ndas');
+const onboardingFolder = path.join(__dirname, '..', 'uploads', 'onboarding');
 if (!fs.existsSync(resumeFolder)) fs.mkdirSync(resumeFolder, { recursive: true });
 if (!fs.existsSync(ndaFolder)) fs.mkdirSync(ndaFolder, { recursive: true });
+if (!fs.existsSync(onboardingFolder)) fs.mkdirSync(onboardingFolder, { recursive: true });
 
 const storageResume = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -21,6 +23,17 @@ const storageResume = multer.diskStorage({
 const storageNda = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, ndaFolder);
+  },
+  filename: function (req, file, cb) {
+    const timestamp = Date.now();
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `${timestamp}-${safeName}`);
+  },
+});
+
+const storageOnboarding = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, onboardingFolder);
   },
   filename: function (req, file, cb) {
     const timestamp = Date.now();
@@ -45,8 +58,19 @@ const ndaFileFilter = (req, file, cb) => {
 
 const uploadResume = multer({ storage: storageResume, fileFilter: resumeFileFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 const uploadNda = multer({ storage: storageNda, fileFilter: ndaFileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
+const uploadOnboardingAttachments = multer({
+  storage: storageOnboarding,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowedTypes.includes(ext)) return cb(new Error('Only PDF, DOC, DOCX, PNG, JPG and JPEG files are allowed')); 
+    cb(null, true);
+  },
+  limits: { fileSize: 15 * 1024 * 1024 },
+});
 
 module.exports = {
   uploadResume: uploadResume.single('resume'),
   uploadNda: uploadNda.single('nda'),
+  uploadOnboardingAttachments: uploadOnboardingAttachments.array('attachments', 10),
 };

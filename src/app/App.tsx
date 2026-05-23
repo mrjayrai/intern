@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { RoleRoute } from './components/auth/RoleRoute';
+import { Toaster } from './components/ui/sonner';
 import { initializeAuthState } from './lib/api';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -25,6 +26,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Toaster richColors position="top-right" />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<ProtectedRoute />}>

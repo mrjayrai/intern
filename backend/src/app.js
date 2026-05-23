@@ -14,6 +14,7 @@ const ndaRoutes = require('./routes/ndaRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
 const certificateRoutes = require('./routes/certificateRoutes');
 const emailRoutes = require('./routes/emailRoutes');
+const onboardingRoutes = require('./routes/onboardingRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const constants = require('./config/constants');
 
@@ -51,6 +52,7 @@ app.use('/api/nda', ndaRoutes);
 app.use('/api/resumes', resumeRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/emails', emailRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 
 app.use((req, res, next) => {
   const error = new Error(`Not Found - ${req.originalUrl}`);
