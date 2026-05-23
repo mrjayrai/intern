@@ -176,6 +176,33 @@ const createSlaAlertNotifications = async () => {
   }
 };
 
+// extend SLA checks to NonWorkerId and AccessProvision
+createSlaAlertNotifications.extendWithOtherWorkflows = async () => {
+  const nonWorkerService = require('./nonWorkerIdService');
+  const accessService = require('./accessProvisionService');
+  const now = new Date();
+
+  const nonWorkerBreaches = await nonWorkerService.findSlaBreaches();
+  for (const breach of nonWorkerBreaches) {
+    const recipients = [breach.createdBy].filter(Boolean);
+    for (const recipient of recipients) {
+      const exists = await hasSlaAlert(recipient, breach._id, 'NON_WORKER_ID');
+      if (exists) continue;
+      await createNotification({ user: recipient, title: `SLA alert for ID request`, message: `ID request for ${breach.candidateName} is past SLA.`, type: 'SLA_ALERT', workflowStage: 'NON_WORKER_ID', metadata: { nonWorkerId: breach._id, candidateName: breach.candidateName, slaDeadline: breach.slaDeadline }, performedByName: 'System' });
+    }
+  }
+
+  const accessBreaches = await accessService.findSlaBreaches();
+  for (const breach of accessBreaches) {
+    const recipients = [breach.createdBy].filter(Boolean);
+    for (const recipient of recipients) {
+      const exists = await hasSlaAlert(recipient, breach._id, 'ACCESS_PROVISION');
+      if (exists) continue;
+      await createNotification({ user: recipient, title: `SLA alert for Access provision`, message: `Access provisioning for ${breach.candidateId} is past SLA.`, type: 'SLA_ALERT', workflowStage: 'ACCESS_PROVISION', metadata: { accessProvisionId: breach._id, candidateId: breach.candidateId, slaDeadline: breach.slaDeadline }, performedByName: 'System' });
+    }
+  }
+};
+
 module.exports = {
   createNotification,
   listNotifications,

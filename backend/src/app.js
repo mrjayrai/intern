@@ -15,6 +15,8 @@ const resumeRoutes = require('./routes/resumeRoutes');
 const certificateRoutes = require('./routes/certificateRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const onboardingRoutes = require('./routes/onboardingRoutes');
+const nonWorkerIdRoutes = require('./routes/nonWorkerIdRoutes');
+const accessProvisionRoutes = require('./routes/accessProvisionRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const constants = require('./config/constants');
 
@@ -53,6 +55,8 @@ app.use('/api/resumes', resumeRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/ids', nonWorkerIdRoutes);
+app.use('/api/access', accessProvisionRoutes);
 
 app.use((req, res, next) => {
   const error = new Error(`Not Found - ${req.originalUrl}`);

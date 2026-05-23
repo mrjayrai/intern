@@ -7,6 +7,9 @@ const startSlaAlertScheduler = (intervalMinutes = 60) => {
   const runCheck = async () => {
     try {
       await notificationService.createSlaAlertNotifications();
+      if (typeof notificationService.createSlaAlertNotifications.extendWithOtherWorkflows === 'function') {
+        await notificationService.createSlaAlertNotifications.extendWithOtherWorkflows();
+      }
     } catch (error) {
       logger.error(`SLA alert scheduler failed: ${error?.message || error}`);
     }

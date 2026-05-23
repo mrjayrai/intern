@@ -290,6 +290,14 @@ const approveJoiningForm = async (id, user, approvalComment = '') => {
     details: { approved: true, comment: approvalComment },
   });
 
+  // trigger non-worker ID workflow creation
+  try {
+    const nonWorkerService = require('./nonWorkerIdService');
+    await nonWorkerService.createRequest({ referralId: form.referralId, candidateId: form.candidateId, candidateName: form.candidateName, candidateEmail: form.candidateEmail }, user);
+  } catch (err) {
+    console.error('Failed to create NonWorkerId after onboarding approval', err.message || err);
+  }
+
   return form;
 };
 
