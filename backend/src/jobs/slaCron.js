@@ -1,4 +1,5 @@
 const notificationService = require('../services/notificationService');
+const ndaService = require('../services/ndaService');
 const logger = require('../utils/logger');
 
 const startSlaAlertScheduler = (intervalMinutes = 60) => {
@@ -6,6 +7,7 @@ const startSlaAlertScheduler = (intervalMinutes = 60) => {
 
   const runCheck = async () => {
     try {
+      await ndaService.expireOverdueNdas();
       await notificationService.createSlaAlertNotifications();
       if (typeof notificationService.createSlaAlertNotifications.extendWithOtherWorkflows === 'function') {
         await notificationService.createSlaAlertNotifications.extendWithOtherWorkflows();

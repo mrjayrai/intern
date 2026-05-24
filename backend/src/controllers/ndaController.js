@@ -1,60 +1,105 @@
-﻿const ndaService = require('../services/ndaService');
-const ApiError = require('../utils/apiError');
-const { validateNdaUpload, validateNdaSign } = require('../validators/ndaValidator');
-
-exports.uploadNda = async (req, res, next) => {
-  try {
-    const errors = validateNdaUpload(req);
-    if (errors.length) return next(new ApiError(400, 'Invalid payload', errors));
-
-    const actor = req.user || {};
-    const nda = await ndaService.uploadNdaForReferral(req.params.referralId, req.file, actor);
-    return res.status(201).json({ success: true, data: nda });
-  } catch (err) {
-    return next(err);
-  }
-};
-
-exports.signNda = async (req, res, next) => {
-  try {
-    const errors = validateNdaSign(req.body, req.params);
-    if (errors.length) return next(new ApiError(400, 'Invalid payload', errors));
-
-    const actor = req.user || {};
-    const signerInfo = { signedBy: req.body.signedBy, signedById: req.body.signedById };
-    const nda = await ndaService.signNdaForReferral(req.params.referralId, signerInfo, actor);
-    return res.status(200).json({ success: true, data: nda });
-  } catch (err) {
-    return next(err);
-  }
-};
-
-exports.archiveNda = async (req, res, next) => {
-  try {
-    const reason = req.body.reason || '';
-    const actor = req.user || {};
-    const nda = await ndaService.archiveNda(req.params.referralId, reason, actor);
-    return res.status(200).json({ success: true, data: nda });
-  } catch (err) {
-    return next(err);
-  }
-};
-
-exports.getNda = async (req, res, next) => {
-  try {
-    const nda = await ndaService.getNdaByReferral(req.params.referralId);
-    if (!nda) return next(new ApiError(404, 'NDA not found'));
-    return res.status(200).json({ success: true, data: nda });
-  } catch (err) {
-    return next(err);
-  }
-};
+﻿const ApiError = require('../utils/apiError');
 const asyncHandler = require('../utils/asyncHandler');
+const ndaService = require('../services/ndaService');
+const { validateNdaCreate, validateNdaUpdate, validateNdaSign, validateNdaReject, validateNdaArchive, validateNdaAction } = require('../validators/ndaValidator');
+const { ROLES } = require('../constants/roles');
 
-exports.listNDAs = asyncHandler(async (req, res) => {
-  res.status(200).json({ success: true, data: [], message: 'List NDAs placeholder' });
+const isCandidateOwner = (nda, user) => {
+  if (!nda || !user || user.role !== ROLES.CANDIDATE) return false;
+  return nda.candidateId?.toString() === user.id?.toString() || nda.candidateEmail === user.email;
+};
+
+exports.createNda = asyncHandler(async (req, res) => {
+  const errors = validateNdaCreate(req.body);
+  if (errors.length) throw new ApiError(400, 'Invalid payload', errors);
+
+  const actor = req.user || {};
+  const nda = await ndaService.createNda(req.body, req.file, actor);
+  return res.status(201).json({ success: true, data: nda });
 });
 
-exports.submitNDA = asyncHandler(async (req, res) => {
-  res.status(201).json({ success: true, data: req.body, message: 'Submit NDA placeholder' });
+exports.listNdas = asyncHandler(async (req, res) => {
+  const filters = {
+    status: req.query.status,
+    workflowStage: req.query.workflowStage,
+    candidateId: req.query.candidateId,
+    candidateEmail: req.query.candidateEmail,
+    referralId: req.query.referralId,
+  };
+
+  if (req.user.role === ROLES.CANDIDATE) {
+    filters.candidateId = req.user.id;
+    filters.candidateEmail = req.user.email;
+  }
+
+  const results = await ndaService.getAllNdas(filters, req.query);
+  return res.status(200).json({ success: true, data: results });
+});
+
+exports.getNda = asyncHandler(async (req, res) => {
+  const nda = await ndaService.getNdaById(req.params.id);
+  if (!nda) throw new ApiError(404, 'NDA not found');
+  if (req.user.role === ROLES.CANDIDATE && !isCandidateOwner(nda, req.user)) {
+    throw new ApiError(403, 'Forbidden: cannot access this NDA');
+  }
+  return res.status(200).json({ success: true, data: nda });
+});
+
+exports.updateNda = asyncHandler(async (req, res) => {
+  const errors = validateNdaUpdate(req.body, req.params);
+  if (errors.length) throw new ApiError(400, 'Invalid payload', errors);
+
+  const actor = req.user || {};
+  const nda = await ndaService.updateNda(req.params.id, req.body, req.file, actor);
+  return res.status(200).json({ success: true, data: nda });
+});
+
+exports.deleteNda = asyncHandler(async (req, res) => {
+  const nda = await ndaService.deleteNda(req.params.id, req.user || {});
+  if (!nda) throw new ApiError(404, 'NDA not found');
+  return res.status(200).json({ success: true, data: nda });
+});
+
+exports.signNda = asyncHandler(async (req, res) => {
+  const errors = validateNdaSign(req.body, req.params);
+  if (errors.length) throw new ApiError(400, 'Invalid payload', errors);
+
+  const actor = req.user || {};
+  const payload = {
+    signatureName: req.body.signatureName,
+    signatureAccepted: req.body.signatureAccepted,
+    notes: req.body.notes,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'],
+  };
+
+  const nda = await ndaService.signNda(req.params.id, payload, actor);
+  return res.status(200).json({ success: true, data: nda });
+});
+
+exports.approveNda = asyncHandler(async (req, res) => {
+  const errors = validateNdaAction(req.body, req.params);
+  if (errors.length) throw new ApiError(400, 'Invalid payload', errors);
+
+  const actor = req.user || {};
+  const nda = await ndaService.approveNda(req.params.id, { notes: req.body.notes }, actor);
+  return res.status(200).json({ success: true, data: nda });
+});
+
+exports.rejectNda = asyncHandler(async (req, res) => {
+  const errors = validateNdaReject(req.body, req.params);
+  if (errors.length) throw new ApiError(400, 'Invalid payload', errors);
+
+  const actor = req.user || {};
+  const nda = await ndaService.rejectNda(req.params.id, { notes: req.body.notes }, actor);
+  return res.status(200).json({ success: true, data: nda });
+});
+
+exports.archiveNda = asyncHandler(async (req, res) => {
+  const errors = validateNdaArchive(req.body, req.params);
+  if (errors.length) throw new ApiError(400, 'Invalid payload', errors);
+
+  const actor = req.user || {};
+  const nda = await ndaService.archiveNda(req.params.id, req.body.reason || '', actor);
+  return res.status(200).json({ success: true, data: nda });
 });

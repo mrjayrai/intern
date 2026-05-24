@@ -44,8 +44,8 @@ const transitionReferralStage = async (referral, nextStage, actor = {}, note = '
   // Enforce NDA-signed requirement for stages that should not be reachable before NDA is signed
   const requireNdaStages = [WORKFLOW_STAGES.READY_TO_START, WORKFLOW_STAGES.ACTIVE];
   if (requireNdaStages.includes(nextStage)) {
-    const nda = await NDA.findOne({ referral: referral._id, archived: { $ne: true } }).sort({ createdAt: -1 });
-    if (!nda || !nda.signed) {
+    const nda = await NDA.findOne({ referral: referral._id, status: { $ne: 'ARCHIVED' } }).sort({ createdAt: -1 });
+    if (!nda || !nda.signedAt) {
       throw new ApiError(400, 'NDA must be signed before moving to this stage');
     }
   }

@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 const resumeFolder = path.join(__dirname, '..', 'uploads', 'resumes');
-const ndaFolder = path.join(__dirname, '..', 'uploads', 'ndas');
+const ndaFolder = path.join(__dirname, '..', 'uploads', 'nda');
 const onboardingFolder = path.join(__dirname, '..', 'uploads', 'onboarding');
 if (!fs.existsSync(resumeFolder)) fs.mkdirSync(resumeFolder, { recursive: true });
 if (!fs.existsSync(ndaFolder)) fs.mkdirSync(ndaFolder, { recursive: true });
@@ -50,9 +50,9 @@ const resumeFileFilter = (req, file, cb) => {
 };
 
 const ndaFileFilter = (req, file, cb) => {
-  const allowedTypes = ['.pdf'];
+  const allowedTypes = ['.pdf', '.doc', '.docx'];
   const ext = path.extname(file.originalname).toLowerCase();
-  if (!allowedTypes.includes(ext)) return cb(new Error('Only PDF files are allowed for NDAs'));
+  if (!allowedTypes.includes(ext)) return cb(new Error('Only PDF, DOC, and DOCX files are allowed for NDAs'));
   cb(null, true);
 };
 

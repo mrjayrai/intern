@@ -1,5 +1,5 @@
 const express = require('express');
-const router = express.Router({ mergeParams: true });
+const router = express.Router();
 const ndaController = require('../controllers/ndaController');
 const { uploadNda } = require('../middleware/uploadMiddleware');
 const authMiddleware = require('../middleware/authMiddleware');
@@ -8,16 +8,16 @@ const { ROLES } = require('../constants/roles');
 
 router.use(authMiddleware);
 
-// upload NDA (allowed for referrer, hr, compliance, super_admin)
-router.post('/:referralId/nda', authorize([ROLES.REFERRER, ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN]), uploadNda, ndaController.uploadNda);
+router.post('/', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN]), uploadNda, ndaController.createNda);
+router.get('/', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN, ROLES.MENTOR, ROLES.REFERRER, ROLES.CANDIDATE]), ndaController.listNdas);
+router.get('/:id', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN, ROLES.MENTOR, ROLES.REFERRER, ROLES.CANDIDATE]), ndaController.getNda);
+router.put('/:id', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN]), uploadNda, ndaController.updateNda);
+router.delete('/:id', authorize([ROLES.SUPER_ADMIN]), ndaController.deleteNda);
 
-// sign NDA (allowed for mentor, hr, referrer, super_admin)
-router.post('/:referralId/nda/sign', authorize([ROLES.MENTOR, ROLES.HR, ROLES.REFERRER, ROLES.SUPER_ADMIN]), ndaController.signNda);
-
-// archive NDA (admin actions)
-router.post('/:referralId/nda/archive', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), ndaController.archiveNda);
-
-router.get('/:referralId/nda', authorize([ROLES.HR, ROLES.MENTOR, ROLES.REFERRER, ROLES.SUPER_ADMIN]), ndaController.getNda);
+router.post('/:id/sign', authorize([ROLES.CANDIDATE, ROLES.SUPER_ADMIN]), ndaController.signNda);
+router.post('/:id/approve', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN]), ndaController.approveNda);
+router.post('/:id/reject', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN]), ndaController.rejectNda);
+router.post('/:id/archive', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), ndaController.archiveNda);
 
 module.exports = router;
 
