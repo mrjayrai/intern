@@ -265,6 +265,75 @@ export type ExtensionRequestRecord = {
   updatedAt?: string;
 };
 
+export type ReportFilters = {
+  startDate?: string;
+  endDate?: string;
+  department?: string;
+  workflowStage?: string;
+  status?: string;
+  granularity?: 'day' | 'week' | 'month';
+  reportType?: string;
+};
+
+export type OverviewMetrics = {
+  totalReferrals: number;
+  activeInternships: number;
+  completedInternships: number;
+  slaBreaches: number;
+  statusDistribution?: Record<string, number>;
+};
+
+export type OnboardingFunnelPoint = {
+  stage: string;
+  count: number;
+  percentage: number;
+};
+
+export type ReferralConversionMetrics = {
+  total: number;
+  converted: number;
+  rejected: number;
+  pending: number;
+  conversionRate: number;
+  rejectionRate: number;
+};
+
+export type SlaMetrics = {
+  total: number;
+  onTime: number;
+  breached: number;
+  completed: number;
+  breachRate: number;
+  complianceRate: number;
+};
+
+export type WorkflowBottleneckPoint = {
+  stage: string;
+  count: number;
+  avgDaysInStage: number;
+};
+
+export type CompletionMetrics = {
+  total: number;
+  completed: number;
+  active: number;
+  terminated: number;
+  certificateIssued: number;
+  completionRate: number;
+  certificateRate: number;
+};
+
+export type TimelineTrendPoint = {
+  _id?: {
+    year?: number;
+    month?: number;
+    week?: number;
+    day?: number;
+  };
+  referrals: number;
+  completed: number;
+};
+
 type StoredUser = Partial<AuthUser> & {
   _id?: string;
 };
@@ -429,6 +498,23 @@ export async function apiRequest<T>(path: string, options: ApiRequestConfig = {}
   }
 }
 
+export async function apiDownload(path: string, options: ApiRequestConfig = {}): Promise<Blob> {
+  try {
+    const response = await apiClient.request<Blob>({
+      url: path,
+      responseType: 'blob',
+      ...options,
+    });
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new Error(error.message || 'Download failed');
+    }
+
+    throw error;
+  }
+}
+
 export function apiUrl(path: string) {
   return `${API_BASE_URL}${path}`;
 }
@@ -580,6 +666,40 @@ export const api = {
       apiRequest<ExtensionRequestRecord>(`/api/tracking/extension-request/${id}/reject`, {
         method: 'POST',
         data: { comments },
+      }),
+  },
+  reports: {
+    overview: (params?: ReportFilters) =>
+      apiRequest<{ reportType: string; metrics: OverviewMetrics; generatedAt: string; filters: ReportFilters }>('/api/reports/overview', {
+        params,
+      }),
+    onboarding: (params?: ReportFilters) =>
+      apiRequest<{ reportType: string; funnel: OnboardingFunnelPoint[]; generatedAt: string; filters: ReportFilters }>('/api/reports/onboarding', {
+        params,
+      }),
+    referrals: (params?: ReportFilters) =>
+      apiRequest<{ reportType: string; conversion: ReferralConversionMetrics; generatedAt: string; filters: ReportFilters }>('/api/reports/referrals', {
+        params,
+      }),
+    sla: (params?: ReportFilters) =>
+      apiRequest<{ reportType: string; metrics: SlaMetrics; generatedAt: string; filters: ReportFilters }>('/api/reports/sla', {
+        params,
+      }),
+    workflows: (params?: ReportFilters) =>
+      apiRequest<{ reportType: string; bottlenecks: WorkflowBottleneckPoint[]; completion: CompletionMetrics; generatedAt: string; filters: ReportFilters }>('/api/reports/workflows', {
+        params,
+      }),
+    timeline: (params?: ReportFilters) =>
+      apiRequest<{ reportType: string; trends: TimelineTrendPoint[]; granularity: string; generatedAt: string; filters: ReportFilters }>('/api/reports/timeline', {
+        params,
+      }),
+    exportCsv: (params?: ReportFilters & { reportType?: string }) =>
+      apiDownload('/api/reports/export/csv', {
+        params,
+      }),
+    exportPdf: (params?: ReportFilters & { reportType?: string }) =>
+      apiDownload('/api/reports/export/pdf', {
+        params,
       }),
   },
 };
