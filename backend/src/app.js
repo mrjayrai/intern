@@ -18,6 +18,7 @@ const onboardingRoutes = require('./routes/onboardingRoutes');
 const nonWorkerIdRoutes = require('./routes/nonWorkerIdRoutes');
 const accessProvisionRoutes = require('./routes/accessProvisionRoutes');
 const trackingRoutes = require('./routes/trackingRoutes');
+const reportsRoutes = require('./routes/reportsRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const constants = require('./config/constants');
 
@@ -59,6 +60,7 @@ app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/ids', nonWorkerIdRoutes);
 app.use('/api/access', accessProvisionRoutes);
 app.use('/api/tracking', trackingRoutes);
+app.use('/api/reports', reportsRoutes);
 
 app.use((req, res, next) => {
   const error = new Error(`Not Found - ${req.originalUrl}`);
