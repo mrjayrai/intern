@@ -90,7 +90,14 @@ export function AIAssistant() {
   };
 
   return (
-    <div className="space-y-6 p-8">
+    <div className="relative space-y-6 p-8">
+      {/* Coming Soon Watermark Overlay */}
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+        <div className="rotate-[-32deg] select-none text-[8rem] font-black uppercase tracking-wider text-purple-200/80">
+          Coming Soon
+        </div>
+      </div>
+      
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
