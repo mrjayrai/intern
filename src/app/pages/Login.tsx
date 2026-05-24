@@ -36,7 +36,8 @@ export function Login() {
     try {
       const session = await api.login(email, password);
       setSession(session.accessToken, session.user);
-      navigate(redirectPath, { replace: true });
+      const destination = session.user.role === 'candidate' ? '/onboarding' : redirectPath;
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to sign in');
     } finally {

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../components/ui/alert-dialog';
 import { Search, Filter, CheckCircle, Clock, AlertTriangle, IdCard, Download, Plus, RefreshCcw } from 'lucide-react';
 import { api, getStoredUser, type NonWorkerIdRequest, type NonWorkerIdPayload, type UserRole } from '../lib/api';
+import { CandidateSelect, type CandidateOption } from '../components/CandidateSelect';
 import { SLAIndicator } from '../components/enterprise/SLAIndicator';
 import { WorkflowCard } from '../components/enterprise/WorkflowCard';
 import { StatusBadge } from '../components/enterprise/StatusBadge';
@@ -66,6 +67,7 @@ export function IDs() {
   const [page, setPage] = useState(1);
   const pageSize = 8;
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createCandidate, setCreateCandidate] = useState<CandidateOption | null>(null);
   const [approvalDialog, setApprovalDialog] = useState<ApprovalDialog | null>(null);
   const [actionComment, setActionComment] = useState('');
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -147,17 +149,19 @@ export function IDs() {
   }, [requests]);
 
   const handleCreate = async (values: CreateIdForm) => {
-    const candidateId = storedUser?.role === 'candidate' ? storedUser.id : values.candidateId?.trim();
+    const candidateId = storedUser?.role === 'candidate'
+      ? storedUser.id
+      : (createCandidate?.id ?? values.candidateId?.trim());
 
     if (!candidateId) {
-      toast.error('Candidate ID is required');
+      toast.error('Please select a candidate');
       return;
     }
 
     const payload: NonWorkerIdPayload = {
       candidateId,
-      candidateName: values.candidateName,
-      candidateEmail: values.candidateEmail,
+      candidateName: createCandidate?.candidateName ?? values.candidateName,
+      candidateEmail: createCandidate?.candidateEmail ?? values.candidateEmail,
       notes: values.notes,
     };
 
@@ -166,6 +170,7 @@ export function IDs() {
       setRequests((current) => [created, ...current]);
       toast.success('ID request created');
       setIsCreateOpen(false);
+      setCreateCandidate(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to create request';
       toast.error(message);
@@ -544,7 +549,7 @@ export function IDs() {
         </Card>
       </div>
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) setCreateCandidate(null); }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create new ID request</DialogTitle>
@@ -566,22 +571,18 @@ export function IDs() {
             }}
             className="space-y-4"
           >
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Candidate name</label>
-                <Input name="candidateName" required />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Candidate email</label>
-                <Input name="candidateEmail" type="email" required />
-              </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Candidate</label>
+              <CandidateSelect
+                value={createCandidate?.id}
+                onChange={(candidate: CandidateOption | null) => setCreateCandidate(candidate)}
+              />
+              {createCandidate && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {createCandidate.candidateName} &mdash; {createCandidate.candidateEmail}
+                </p>
+              )}
             </div>
-            {userRole !== 'candidate' && (
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Candidate ID</label>
-                <Input name="candidateId" placeholder="Mongo ID of a candidate user" required />
-              </div>
-            )}
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Notes</label>
               <Textarea name="notes" rows={4} placeholder="Add request context or onboarding notes" />

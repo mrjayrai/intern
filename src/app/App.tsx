@@ -34,7 +34,9 @@ export default function App() {
         <Route path="/register" element={<Register />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
-            <Route path="/" element={<Dashboard />} />
+            <Route element={<RoleRoute allowedRoles={ROUTE_PERMISSIONS['/']} redirectTo="/onboarding" />}>
+              <Route path="/" element={<Dashboard />} />
+            </Route>
             <Route path="/referrals" element={<Referrals />} />
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/onboarding" element={<Onboarding />} />

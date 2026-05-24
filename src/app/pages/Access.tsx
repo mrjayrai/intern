@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 import { Key, CheckCircle, Clock, AlertTriangle, Shield, Search, Plus, RefreshCcw } from 'lucide-react';
 import { api, getStoredUser, type AccessProvisionRecord, type AccessProvisionPayload } from '../lib/api';
+import { CandidateSelect, type CandidateOption } from '../components/CandidateSelect';
 import { ProvisioningChecklist } from '../components/enterprise/ProvisioningChecklist';
 import { SLAIndicator } from '../components/enterprise/SLAIndicator';
 import { StatusBadge } from '../components/enterprise/StatusBadge';
@@ -57,7 +58,8 @@ export function Access() {
   const [confirmAction, setConfirmAction] = useState<'start' | 'complete' | null>(null);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
 
-  const { register, handleSubmit, reset, formState } = useForm<AccessFormValues>({
+  const [selectedCandidateId, setSelectedCandidateId] = useState('');
+  const { register, handleSubmit, reset, setValue, formState } = useForm<AccessFormValues>({
     defaultValues: {
       candidateId: '',
       candidateName: '',
@@ -510,7 +512,7 @@ export function Access() {
         </Card>
       </div>
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) { reset(); setSelectedCandidateId(''); } }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>New access provisioning request</DialogTitle>
@@ -519,19 +521,27 @@ export function Access() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(handleCreate)} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Candidate name</label>
-                <Input {...register('candidateName', { required: true })} />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Candidate ID</label>
-                <Input {...register('candidateId', { required: true })} />
-              </div>
-            </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Candidate email</label>
-              <Input {...register('candidateEmail')} type="email" />
+              <label className="mb-2 block text-sm font-medium text-slate-700">Candidate</label>
+              <CandidateSelect
+                value={selectedCandidateId}
+                onChange={(candidate: CandidateOption | null) => {
+                  if (candidate) {
+                    setSelectedCandidateId(candidate.id);
+                    setValue('candidateId', candidate.id, { shouldValidate: true });
+                    setValue('candidateName', candidate.candidateName, { shouldValidate: true });
+                    setValue('candidateEmail', candidate.candidateEmail ?? '');
+                  } else {
+                    setSelectedCandidateId('');
+                    setValue('candidateId', '');
+                    setValue('candidateName', '');
+                    setValue('candidateEmail', '');
+                  }
+                }}
+              />
+              {formState.errors.candidateName || formState.errors.candidateId ? (
+                <p className="mt-1 text-xs text-red-600">Please select a candidate</p>
+              ) : null}
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Systems to provision</label>

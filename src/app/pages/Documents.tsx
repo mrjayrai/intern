@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { api, apiUrl, getAccessToken, getStoredUser, type NdaRecord, type NdaStatus, type UserRole } from '../lib/api';
+import { CandidateSelect, type CandidateOption } from '../components/CandidateSelect';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -119,6 +120,7 @@ export function Documents() {
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
   const [uploadForm, setUploadForm] = useState<UploadForm>(defaultUploadForm);
+  const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [signatureName, setSignatureName] = useState('');
   const [signatureAccepted, setSignatureAccepted] = useState(false);
   const [actionNotes, setActionNotes] = useState('');
@@ -221,6 +223,7 @@ export function Documents() {
 
       await api.nda.create(formData);
       setUploadForm(defaultUploadForm);
+      setSelectedCandidateId('');
       await refreshAndClose('NDA uploaded');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to upload NDA');
@@ -522,21 +525,37 @@ export function Documents() {
               <label className="mb-2 block text-sm font-medium">Version label</label>
               <Input value={uploadForm.version} onChange={(event) => setUploadForm((current) => ({ ...current, version: event.target.value }))} />
             </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium">Referral ID</label>
-              <Input value={uploadForm.referralId} onChange={(event) => setUploadForm((current) => ({ ...current, referralId: event.target.value }))} />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium">Candidate ID</label>
-              <Input value={uploadForm.candidateId} onChange={(event) => setUploadForm((current) => ({ ...current, candidateId: event.target.value }))} />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium">Candidate name</label>
-              <Input value={uploadForm.candidateName} onChange={(event) => setUploadForm((current) => ({ ...current, candidateName: event.target.value }))} />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium">Candidate email</label>
-              <Input type="email" value={uploadForm.candidateEmail} onChange={(event) => setUploadForm((current) => ({ ...current, candidateEmail: event.target.value }))} />
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-sm font-medium">Candidate</label>
+              <CandidateSelect
+                value={selectedCandidateId}
+                onChange={(candidate: CandidateOption | null) => {
+                  if (candidate) {
+                    setSelectedCandidateId(candidate.id);
+                    setUploadForm((current) => ({
+                      ...current,
+                      referralId: candidate.referralId,
+                      candidateId: candidate.id,
+                      candidateName: candidate.candidateName,
+                      candidateEmail: candidate.candidateEmail,
+                    }));
+                  } else {
+                    setSelectedCandidateId('');
+                    setUploadForm((current) => ({
+                      ...current,
+                      referralId: '',
+                      candidateId: '',
+                      candidateName: '',
+                      candidateEmail: '',
+                    }));
+                  }
+                }}
+              />
+              {selectedCandidateId && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Referral ID: {uploadForm.referralId}
+                </p>
+              )}
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium">Expiry date</label>

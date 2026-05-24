@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { api, getAccessToken, type ApiRecord } from '../lib/api';
+import { CandidateSelect, type CandidateOption } from '../components/CandidateSelect';
 import {
   AlertTriangle,
   Award,
@@ -128,6 +129,7 @@ export function Certificates() {
   const [errorMessage, setErrorMessage] = useState('');
   const [isIssueOpen, setIsIssueOpen] = useState(false);
   const [issueForm, setIssueForm] = useState<IssueCertificateForm>(initialIssueForm);
+  const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [issueError, setIssueError] = useState('');
   const [isIssuing, setIsIssuing] = useState(false);
 
@@ -221,6 +223,7 @@ export function Certificates() {
       await api.issueCertificate(payload);
       await loadCertificates();
       setIssueForm(initialIssueForm);
+      setSelectedCandidateId('');
       setIsIssueOpen(false);
     } catch (err) {
       setIssueError(err instanceof Error ? err.message : 'Unable to issue certificate');
@@ -442,7 +445,7 @@ export function Certificates() {
         </CardContent>
       </Card>
 
-      <Dialog open={isIssueOpen} onOpenChange={setIsIssueOpen}>
+      <Dialog open={isIssueOpen} onOpenChange={(open) => { setIsIssueOpen(open); if (!open) { setIssueForm(initialIssueForm); setSelectedCandidateId(''); setIssueError(''); } }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Issue Certificate</DialogTitle>
@@ -453,13 +456,22 @@ export function Certificates() {
 
           <form className="space-y-5" onSubmit={handleIssueCertificate}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label htmlFor="candidateName" className="text-sm font-medium">Candidate name</label>
-                <Input id="candidateName" value={issueForm.candidateName} onChange={(event) => updateIssueForm('candidateName', event.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="candidateEmail" className="text-sm font-medium">Candidate email</label>
-                <Input id="candidateEmail" type="email" value={issueForm.candidateEmail} onChange={(event) => updateIssueForm('candidateEmail', event.target.value)} />
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-medium">Candidate</label>
+                <CandidateSelect
+                  value={selectedCandidateId}
+                  onChange={(candidate: CandidateOption | null) => {
+                    if (candidate) {
+                      setSelectedCandidateId(candidate.id);
+                      updateIssueForm('candidateName', candidate.candidateName);
+                      updateIssueForm('candidateEmail', candidate.candidateEmail);
+                    } else {
+                      setSelectedCandidateId('');
+                      updateIssueForm('candidateName', '');
+                      updateIssueForm('candidateEmail', '');
+                    }
+                  }}
+                />
               </div>
               <div className="space-y-2">
                 <label htmlFor="department" className="text-sm font-medium">Department</label>

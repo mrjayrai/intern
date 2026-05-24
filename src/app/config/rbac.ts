@@ -2,7 +2,7 @@ import type { UserRole } from '../lib/api';
 
 // Route-level permissions — which roles can access which paths
 export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
-  '/': ['superAdmin', 'hr', 'mentor', 'referrer', 'candidate', 'it', 'compliance', 'employee'],
+  '/': ['superAdmin', 'hr', 'mentor', 'referrer', 'it', 'compliance', 'employee'],
   '/referrals': ['superAdmin', 'hr', 'mentor', 'referrer'],
   '/candidates': ['superAdmin', 'hr', 'mentor'],
   '/onboarding': ['superAdmin', 'hr', 'candidate', 'employee'],
@@ -18,7 +18,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
 
 // Sidebar nav visibility — which nav items appear for which roles
 export const SIDEBAR_PERMISSIONS: Record<string, UserRole[]> = {
-  '/': ['superAdmin', 'hr', 'mentor', 'referrer', 'candidate', 'it', 'compliance', 'employee'],
+  '/': ['superAdmin', 'hr', 'mentor', 'referrer', 'it', 'compliance', 'employee'],
   '/referrals': ['superAdmin', 'hr', 'mentor', 'referrer'],
   '/onboarding': ['superAdmin', 'hr', 'candidate', 'employee'],
   '/documents': ['superAdmin', 'hr', 'candidate', 'compliance', 'employee'],
