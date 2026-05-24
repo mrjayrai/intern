@@ -19,7 +19,8 @@ export type UserRole =
   | 'referrer'
   | 'candidate'
   | 'it'
-  | 'compliance';
+  | 'compliance'
+  | 'employee';
 
 export type AuthUser = {
   id: string;
@@ -571,6 +572,12 @@ export const api = {
       auth: false,
       method: 'POST',
       data: { email, password },
+    }),
+  register: (data: { name: string; email: string; password: string; role: UserRole }) =>
+    apiRequest<AuthSession>('/api/auth/register', {
+      auth: false,
+      method: 'POST',
+      data,
     }),
   logout: () => apiRequest('/api/auth/logout', { method: 'POST' }),
   dashboard: <T = ApiRecord>() => apiRequest<T>('/api/dashboard'),

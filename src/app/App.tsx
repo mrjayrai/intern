@@ -5,7 +5,9 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { RoleRoute } from './components/auth/RoleRoute';
 import { Toaster } from './components/ui/sonner';
 import { initializeAuthState } from './lib/api';
+import { ROUTE_PERMISSIONS } from './config/rbac';
 import { Login } from './pages/Login';
+import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { Referrals } from './pages/Referrals';
 import { Candidates } from './pages/Candidates';
@@ -29,6 +31,7 @@ export default function App() {
       <Toaster richColors position="top-right" />
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
@@ -36,29 +39,19 @@ export default function App() {
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/documents" element={<Documents />} />
-            <Route
-              element={
-                <RoleRoute allowedRoles={['superAdmin', 'hr', 'it']} />
-              }
-            >
+            <Route element={<RoleRoute allowedRoles={ROUTE_PERMISSIONS['/ids']} />}>
               <Route path="/ids" element={<IDs />} />
+            </Route>
+            <Route element={<RoleRoute allowedRoles={ROUTE_PERMISSIONS['/access']} />}>
               <Route path="/access" element={<Access />} />
             </Route>
             <Route path="/tracking" element={<Tracking />} />
             <Route path="/certificates" element={<Certificates />} />
-            <Route
-              element={
-                <RoleRoute allowedRoles={['superAdmin', 'hr', 'compliance']} />
-              }
-            >
+            <Route element={<RoleRoute allowedRoles={ROUTE_PERMISSIONS['/reports']} />}>
               <Route path="/reports" element={<Reports />} />
             </Route>
             <Route path="/ai-assistant" element={<AIAssistant />} />
-            <Route
-              element={
-                <RoleRoute allowedRoles={['superAdmin']} />
-              }
-            >
+            <Route element={<RoleRoute allowedRoles={ROUTE_PERMISSIONS['/settings']} />}>
               <Route
                 path="/settings"
                 element={

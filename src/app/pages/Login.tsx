@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
@@ -143,6 +143,13 @@ export function Login() {
               <Building2 className="mr-2 h-4 w-4" />
               Sign in with Microsoft SSO
             </Button>
+
+            <p className="text-center text-sm text-gray-600">
+              Don't have an account?{' '}
+              <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
+                Create account
+              </Link>
+            </p>
 
             <div className="rounded-lg bg-blue-50 p-4">
               <div className="flex items-start gap-3">
