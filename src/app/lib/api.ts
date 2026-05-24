@@ -265,6 +265,52 @@ export type ExtensionRequestRecord = {
   updatedAt?: string;
 };
 
+export type NdaStatus =
+  | 'DRAFT'
+  | 'PENDING_SIGNATURE'
+  | 'SIGNED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'ARCHIVED';
+
+export type NdaRecord = {
+  _id: string;
+  referral?: string;
+  title: string;
+  description?: string;
+  candidateId?: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  documentUrl?: string;
+  originalFilename?: string;
+  documentType?: 'PDF' | 'DOC' | 'DOCX';
+  version?: number;
+  status: NdaStatus;
+  uploadedBy?: string;
+  uploadedById?: string;
+  signedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  expiresAt?: string;
+  signatureName?: string;
+  signatureAccepted?: boolean;
+  notes?: string;
+  workflowStage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type NdaListResponse = {
+  data: NdaRecord[];
+  meta?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+};
+
 export type ReportFilters = {
   startDate?: string;
   endDate?: string;
@@ -550,11 +596,49 @@ export const api = {
       onUploadProgress,
     }),
   ndas: <T = ApiRecord[]>() => apiRequest<T>('/api/nda'),
-  submitNda: (data: ApiRecord) =>
-    apiRequest('/api/nda', {
-      method: 'POST',
-      data,
-    }),
+  nda: {
+    list: (params?: Record<string, string>) =>
+      apiRequest<NdaListResponse>('/api/nda', {
+        method: 'GET',
+        params,
+      }),
+    getById: (id: string) =>
+      apiRequest<NdaRecord>(`/api/nda/${id}`),
+    create: (data: FormData) =>
+      apiRequest<NdaRecord>('/api/nda', {
+        method: 'POST',
+        data,
+      }),
+    update: (id: string, data: FormData) =>
+      apiRequest<NdaRecord>(`/api/nda/${id}`, {
+        method: 'PUT',
+        data,
+      }),
+    sign: (id: string, data: { signatureName: string; signatureAccepted: boolean; notes?: string }) =>
+      apiRequest<NdaRecord>(`/api/nda/${id}/sign`, {
+        method: 'POST',
+        data,
+      }),
+    approve: (id: string, notes?: string) =>
+      apiRequest<NdaRecord>(`/api/nda/${id}/approve`, {
+        method: 'POST',
+        data: { notes },
+      }),
+    reject: (id: string, notes?: string) =>
+      apiRequest<NdaRecord>(`/api/nda/${id}/reject`, {
+        method: 'POST',
+        data: { notes },
+      }),
+    archive: (id: string, reason?: string) =>
+      apiRequest<NdaRecord>(`/api/nda/${id}/archive`, {
+        method: 'POST',
+        data: { reason },
+      }),
+    remove: (id: string) =>
+      apiRequest<NdaRecord>(`/api/nda/${id}`, {
+        method: 'DELETE',
+      }),
+  },
   certificates: <T = ApiRecord[]>() => apiRequest<T>('/api/certificates'),
   issueCertificate: (data: ApiRecord) =>
     apiRequest('/api/certificates/issue', {
