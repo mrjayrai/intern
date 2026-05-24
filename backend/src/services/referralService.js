@@ -31,35 +31,13 @@ const createReferral = async (data, actor = {}) => {
   });
 
   if (referral.candidateEmail) {
-    console.log(`Enqueuing referral received email to ${referral.candidateEmail} for referral ${referral._id}`);
     emailService.enqueueEmail(
       referral.candidateEmail,
       'referralReceived',
-      {
-        name: referral.candidateName,
-        referralId: referral._id.toString(),
-      },
+      { name: referral.candidateName, referralId: referral._id.toString() },
     ).catch((err) => {
       console.error('Failed to enqueue referral received email:', err?.message || err);
     });
-  }
-
-  if (referral.candidateEmail) {
-    console.log(`Sending referral received email to ${referral.candidateEmail}`);
-
-    emailService
-      .sendTemplate(
-        referral.candidateEmail,
-        'referralReceived',
-        {
-          name: referral.candidateName,
-          referralId: referral._id.toString(),
-        },
-        { enqueue: false },
-      )
-      .catch((err) => {
-        console.error('Failed to send referral email:', err?.message || err);
-      });
   }
 
   try {

@@ -13,6 +13,9 @@ router.get('/logs', authorize([ROLES.SUPER_ADMIN, ROLES.HR]), emailController.li
 // retry a failed log
 router.post('/logs/:id/retry', authorize([ROLES.SUPER_ADMIN, ROLES.HR]), emailController.retryLog);
 
+// queue health status
+router.get('/queue-status', authorize([ROLES.SUPER_ADMIN, ROLES.HR]), emailController.queueStatus);
+
 // send test email
 router.post('/test', authorize([ROLES.SUPER_ADMIN, ROLES.HR]), emailController.sendTest);
 

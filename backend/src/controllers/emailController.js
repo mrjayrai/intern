@@ -41,6 +41,23 @@ exports.retryLog = async (req, res, next) => {
   }
 };
 
+exports.queueStatus = async (req, res, next) => {
+  try {
+    const [queued, sending, sent, failed] = await Promise.all([
+      EmailLog.countDocuments({ status: 'queued' }),
+      EmailLog.countDocuments({ status: 'sending' }),
+      EmailLog.countDocuments({ status: 'sent' }),
+      EmailLog.countDocuments({ status: 'failed' }),
+    ]);
+    return res.status(200).json({
+      success: true,
+      data: { queued, sending, sent, failed, total: queued + sending + sent + failed },
+    });
+  } catch (err) {
+    return next(new ApiError(500, 'Failed to get queue status'));
+  }
+};
+
 exports.sendTest = async (req, res, next) => {
   try {
     const to = req.body.to;

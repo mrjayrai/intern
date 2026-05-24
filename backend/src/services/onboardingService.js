@@ -3,6 +3,7 @@ const JoiningForm = require('../models/JoiningForm');
 const Referral = require('../models/Referral');
 const auditService = require('./auditService');
 const workflowService = require('./workflowService');
+const emailService = require('./emailService');
 const { WORKFLOW_STAGES } = require('../constants/workflowStages');
 const { ROLES } = require('../constants/roles');
 
@@ -133,6 +134,18 @@ const createJoiningFormDraft = async (payload, user, files = []) => {
     details: { status: form.status, referralId: String(form.referralId || '' ) },
   });
 
+  try {
+    if (form.candidateEmail) {
+      await emailService.enqueueEmail(form.candidateEmail, 'onboardingUpdate', {
+        name: form.candidateName,
+        status: 'DRAFT',
+        completionPercentage: form.completionPercentage,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to send onboarding draft email', err.message || err);
+  }
+
   return form;
 };
 
@@ -253,6 +266,18 @@ const submitJoiningForm = async (id, user, submissionValidator) => {
     details: { status: form.status, submittedAt: form.submittedAt },
   });
 
+  try {
+    if (form.candidateEmail) {
+      await emailService.enqueueEmail(form.candidateEmail, 'onboardingUpdate', {
+        name: form.candidateName,
+        status: 'SUBMITTED',
+        completionPercentage: form.completionPercentage,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to send onboarding submitted email', err.message || err);
+  }
+
   return form;
 };
 
@@ -289,6 +314,18 @@ const approveJoiningForm = async (id, user, approvalComment = '') => {
     performedById: user.id,
     details: { approved: true, comment: approvalComment },
   });
+
+  try {
+    if (form.candidateEmail) {
+      await emailService.enqueueEmail(form.candidateEmail, 'onboardingUpdate', {
+        name: form.candidateName,
+        status: 'HR_APPROVED',
+        approvedBy: user.name,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to send onboarding approved email', err.message || err);
+  }
 
   // trigger non-worker ID workflow creation
   try {

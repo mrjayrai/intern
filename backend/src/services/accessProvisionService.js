@@ -89,6 +89,22 @@ const startProvision = async (id, user = {}) => {
   await rec.save();
 
   await auditService.createAuditLog({ action: 'START', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: {} });
+
+  try {
+    // Look up candidate email via referral if available
+    if (rec.referralId) {
+      const referral = await Referral.findById(rec.referralId).lean();
+      if (referral && referral.candidateEmail) {
+        await emailService.enqueueEmail(referral.candidateEmail, 'accessProvisioningStarted', {
+          name: referral.candidateName || '',
+          systems: rec.systemAccess || [],
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to send accessProvisioningStarted email', err.message || err);
+  }
+
   return rec;
 };
 
@@ -101,6 +117,25 @@ const completeProvision = async (id, user = {}) => {
   await rec.save();
 
   await auditService.createAuditLog({ action: 'COMPLETE', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: {} });
+
+  try {
+    if (rec.referralId) {
+      const referral = await Referral.findById(rec.referralId).lean();
+      if (referral && referral.candidateEmail) {
+        await emailService.enqueueEmail(referral.candidateEmail, 'accessProvisioningCompleted', {
+          name: referral.candidateName || '',
+          systems: rec.systemAccess || [],
+          adAccountCreated: rec.adAccountCreated,
+          emailProvisioned: rec.emailProvisioned,
+          vpnAccess: rec.vpnAccess,
+          badgeAccess: rec.badgeAccess,
+          otpSent: rec.otpSent,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to send accessProvisioningCompleted email', err.message || err);
+  }
 
   // transition referral to READY_TO_START if workflow allows
   try {

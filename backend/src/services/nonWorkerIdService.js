@@ -49,7 +49,12 @@ const createRequest = async (data = {}, user = {}) => {
       await notificationService.createNotification({ user: rec.createdBy, title: 'ID Requested', message: `Non-worker ID requested for ${rec.candidateName}` });
     }
     if (rec.candidateEmail) {
-      await emailService.enqueueEmail(rec.candidateEmail, 'referralReceived', { candidateName: rec.candidateName });
+      await emailService.enqueueEmail(rec.candidateEmail, 'nonWorkerIdConfirmation', {
+        name: rec.candidateName,
+        requestId: rec._id.toString(),
+        referralId: rec.referralId ? rec.referralId.toString() : '',
+        slaDeadline: rec.slaDeadline ? new Date(rec.slaDeadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '',
+      });
     }
   } catch (err) {
     // non-fatal
@@ -104,6 +109,19 @@ const approveRequest = async (id, user = {}, comment = '') => {
 
   await auditService.createAuditLog({ action: 'APPROVE', resourceType: 'NonWorkerId', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: {} });
 
+  try {
+    if (rec.candidateEmail) {
+      await emailService.enqueueEmail(rec.candidateEmail, 'nonWorkerIdApproved', {
+        name: rec.candidateName,
+        requestId: rec._id.toString(),
+        approvedBy: user.name || 'HR Team',
+        comment: comment || '',
+      });
+    }
+  } catch (err) {
+    console.error('Failed to send nonWorkerIdApproved email', err.message || err);
+  }
+
   // start access provisioning when ID approved
   try {
     const accessService = require('./accessProvisionService');
@@ -127,6 +145,20 @@ const rejectRequest = async (id, user = {}, reason = '') => {
   await rec.save();
 
   await auditService.createAuditLog({ action: 'REJECT', resourceType: 'NonWorkerId', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: { reason } });
+
+  try {
+    if (rec.candidateEmail) {
+      await emailService.enqueueEmail(rec.candidateEmail, 'nonWorkerIdRejected', {
+        name: rec.candidateName,
+        requestId: rec._id.toString(),
+        reason: reason || '',
+        rejectedBy: user.name || 'HR Team',
+      });
+    }
+  } catch (err) {
+    console.error('Failed to send nonWorkerIdRejected email', err.message || err);
+  }
+
   return rec;
 };
 

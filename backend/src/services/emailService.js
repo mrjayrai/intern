@@ -55,19 +55,24 @@ const processLogSend = async (logId) => {
     attachments: log.attachments || [],
   };
 
+  // Increment attempts exactly once per send attempt (fix: was incrementing twice on failure)
+  const sending = await EmailLog.findByIdAndUpdate(
+    logId,
+    { $inc: { attempts: 1 }, lastAttemptAt: new Date(), status: 'sending' },
+    { new: true },
+  );
+
   try {
-    await EmailLog.findByIdAndUpdate(logId, { $inc: { attempts: 1 }, lastAttemptAt: new Date(), status: 'sending' });
     await sendMailRaw(mailOptions);
     await EmailLog.findByIdAndUpdate(logId, { status: 'sent', sentAt: new Date() });
     return true;
   } catch (err) {
-    const updated = await EmailLog.findByIdAndUpdate(logId, { $inc: { attempts: 1 }, lastAttemptAt: new Date(), error: err.message }, { new: true });
-    if (updated.attempts >= MAX_RETRIES) {
-      await EmailLog.findByIdAndUpdate(logId, { status: 'failed' });
+    const isFinal = sending.attempts >= MAX_RETRIES;
+    await EmailLog.findByIdAndUpdate(logId, { error: err.message, status: isFinal ? 'failed' : 'queued' });
+    if (isFinal) {
       return false;
     }
-    // leave as queued for retry
-    await delay(RETRY_BACKOFF_MS * updated.attempts);
+    await delay(RETRY_BACKOFF_MS * sending.attempts);
     return processLogSend(logId);
   }
 };
