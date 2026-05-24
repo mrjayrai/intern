@@ -1,68 +1,223 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
+import { useEffect, useMemo, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import { Button } from '../components/ui/Button';
-import {
-  Key,
-  CheckCircle,
-  Clock,
-  AlertTriangle,
-  Mail,
-  Shield,
-  CreditCard,
-  Server,
-  Lock
-} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
+import { Textarea } from '../components/ui/textarea';
+import { Badge } from '../components/ui/Badge';
+import { Skeleton } from '../components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
+import { Key, CheckCircle, Clock, AlertTriangle, Shield, Search, Plus, RefreshCcw } from 'lucide-react';
+import { api, getStoredUser, type AccessProvisionRecord, type AccessProvisionPayload } from '../lib/api';
+import { ProvisioningChecklist } from '../components/enterprise/ProvisioningChecklist';
+import { SLAIndicator } from '../components/enterprise/SLAIndicator';
+import { StatusBadge } from '../components/enterprise/StatusBadge';
+import { WorkflowCard } from '../components/enterprise/WorkflowCard';
 
-const accessRequests = [
-  {
-    id: 1,
-    candidateName: 'Sarah Chen',
-    department: 'Engineering',
-    services: ['Active Directory', 'Email', 'VPN', 'GitHub', 'Slack'],
-    status: 'completed',
-    adAccount: 'schen@company.com',
-    badgeNumber: 'TMP-2026-1234',
-    completedDate: '2026-05-14',
-  },
-  {
-    id: 2,
-    candidateName: 'Michael Rodriguez',
-    department: 'Design',
-    services: ['Active Directory', 'Email', 'Figma', 'Slack'],
-    status: 'in_progress',
-    adAccount: 'mrodriguez@company.com',
-    badgeNumber: null,
-    completedDate: null,
-  },
-  {
-    id: 3,
-    candidateName: 'Emma Wilson',
-    department: 'Marketing',
-    services: ['Active Directory', 'Email', 'HubSpot', 'Slack'],
-    status: 'pending',
-    adAccount: null,
-    badgeNumber: null,
-    completedDate: null,
-  },
+const statusOptions = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'NOT_STARTED', label: 'Not started' },
+  { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'FAILED', label: 'Failed' },
 ];
 
-const statusConfig = {
-  completed: { label: 'Completed', variant: 'success' as const, icon: CheckCircle },
-  in_progress: { label: 'In Progress', variant: 'info' as const, icon: Clock },
-  pending: { label: 'Pending', variant: 'warning' as const, icon: AlertTriangle },
+const sortOptions = [
+  { value: 'slaDeadline', label: 'SLA Deadline' },
+  { value: 'provisioningStatus', label: 'Status' },
+  { value: 'candidateName', label: 'Candidate' },
+];
+
+type AccessFormValues = {
+  candidateId: string;
+  candidateName: string;
+  candidateEmail?: string;
+  systemAccess: string;
+  notes?: string;
 };
 
 export function Access() {
+  const storedUser = getStoredUser();
+  const userRole = storedUser?.role;
+  const canManage = userRole === 'it' || userRole === 'hr' || userRole === 'superAdmin';
+
+  const [requests, setRequests] = useState<AccessProvisionRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<'slaDeadline' | 'provisioningStatus' | 'candidateName'>('slaDeadline');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'start' | 'complete' | null>(null);
+  const [isAlertOpen, setIsAlertOpen] = useState(false);
+
+  const { register, handleSubmit, reset, formState } = useForm<AccessFormValues>({
+    defaultValues: {
+      candidateId: '',
+      candidateName: '',
+      candidateEmail: '',
+      systemAccess: 'Active Directory, Email, VPN, Badge Access',
+      notes: '',
+    },
+  });
+
+  const fetchRequests = async () => {
+    if (!canManage) {
+      setRequests([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const data = await api.access.list();
+      setRequests(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to load access requests';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, [userRole]);
+
+  const filteredRequests = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return requests
+      .filter((request) => {
+        if (statusFilter !== 'all' && request.provisioningStatus !== statusFilter) return false;
+        if (!normalizedSearch) return true;
+        return [request.candidateName, request.candidateEmail, request.provisioningStatus]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) => {
+        if (sortKey === 'candidateName') {
+          return sortDirection === 'asc'
+            ? a.candidateName.localeCompare(b.candidateName)
+            : b.candidateName.localeCompare(a.candidateName);
+        }
+
+        const valueA = a[sortKey] || '';
+        const valueB = b[sortKey] || '';
+        const dateA = new Date(String(valueA)).getTime();
+        const dateB = new Date(String(valueB)).getTime();
+        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      });
+  }, [requests, searchTerm, statusFilter, sortDirection, sortKey]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+  const pagedRequests = filteredRequests.slice((page - 1) * pageSize, page * pageSize);
+
+  const metrics = useMemo(() => {
+    const total = requests.length;
+    const inProgress = requests.filter((request) => request.provisioningStatus === 'IN_PROGRESS').length;
+    const pending = requests.filter((request) => request.provisioningStatus === 'NOT_STARTED').length;
+    const completed = requests.filter((request) => request.provisioningStatus === 'COMPLETED').length;
+    const breaches = requests.filter((request) => {
+      if (!request.slaDeadline) return false;
+      return new Date(request.slaDeadline) < new Date() && request.provisioningStatus !== 'COMPLETED';
+    }).length;
+    return { total, inProgress, pending, completed, breaches };
+  }, [requests]);
+
+  const handleCreate = async (values: AccessFormValues) => {
+    const systemAccess = values.systemAccess
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const payload: AccessProvisionPayload = {
+      candidateId: values.candidateId,
+      candidateName: values.candidateName,
+      candidateEmail: values.candidateEmail,
+      systemAccess,
+      notes: values.notes,
+    };
+
+    try {
+      const created = await api.access.create(payload);
+      setRequests((current) => [created, ...current]);
+      toast.success('Provisioning request created');
+      reset();
+      setIsCreateOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to create provisioning request';
+      toast.error(message);
+    }
+  };
+
+  const getChecklist = (request: AccessProvisionRecord) => [
+    { label: 'Active Directory account', completed: request.adAccountCreated },
+    { label: 'Email provisioning', completed: request.emailProvisioned },
+    { label: 'VPN access', completed: request.vpnAccess },
+    { label: 'Badge access', completed: request.badgeAccess },
+    { label: 'OTP delivered', completed: request.otpSent },
+  ];
+
+  const handleAction = async (id: string, action: 'start' | 'complete') => {
+    const previous = requests;
+    setRequests((current) =>
+      current.map((request) =>
+        request._id === id
+          ? {
+              ...request,
+              provisioningStatus: action === 'start' ? 'IN_PROGRESS' : 'COMPLETED',
+              completedAt: action === 'complete' ? new Date().toISOString() : request.completedAt,
+            }
+          : request,
+      ),
+    );
+
+    try {
+      const result = action === 'start' ? await api.access.start(id) : await api.access.complete(id);
+      setRequests((current) => current.map((request) => (request._id === result._id ? result : request)));
+      toast.success(`Provisioning ${action === 'start' ? 'started' : 'completed'}`);
+    } catch (err) {
+      setRequests(previous);
+      const message = err instanceof Error ? err.message : 'Unable to update provisioning status';
+      toast.error(message);
+    } finally {
+      setConfirmAction(null);
+      setIsAlertOpen(false);
+    }
+  };
+
+  const canShowEmpty = !isLoading && !error && pagedRequests.length === 0;
+
   return (
     <div className="space-y-6 p-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">IT Access Provisioning</h1>
+          <h1 className="text-3xl font-bold">Access Provisioning</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage system access and credentials for interns
+            Manage account, email, VPN, badge, and system access provisioning.
           </p>
         </div>
-        <Button variant="primary">Provision Access</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage && (
+            <Button variant="primary" onClick={() => setIsCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New provisioning request
+            </Button>
+          )}
+          <Button variant="outline" onClick={fetchRequests}>
+            <RefreshCcw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
@@ -70,8 +225,8 @@ export function Access() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Provisioned</p>
-                <p className="mt-1 text-2xl font-bold">145</p>
+                <p className="text-sm text-muted-foreground">Active provisions</p>
+                <p className="mt-1 text-2xl font-bold">{metrics.total}</p>
               </div>
               <Key className="h-8 w-8 text-blue-500" />
             </div>
@@ -81,8 +236,8 @@ export function Access() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">In Progress</p>
-                <p className="mt-1 text-2xl font-bold text-blue-600">12</p>
+                <p className="text-sm text-muted-foreground">In progress</p>
+                <p className="mt-1 text-2xl font-bold text-blue-600">{metrics.inProgress}</p>
               </div>
               <Clock className="h-8 w-8 text-blue-500" />
             </div>
@@ -93,7 +248,7 @@ export function Access() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="mt-1 text-2xl font-bold text-amber-600">8</p>
+                <p className="mt-1 text-2xl font-bold text-amber-600">{metrics.pending}</p>
               </div>
               <AlertTriangle className="h-8 w-8 text-amber-500" />
             </div>
@@ -103,10 +258,10 @@ export function Access() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Avg Time</p>
-                <p className="mt-1 text-2xl font-bold">1.8h</p>
+                <p className="text-sm text-muted-foreground">SLA breaches</p>
+                <p className="mt-1 text-2xl font-bold text-red-600">{metrics.breaches}</p>
               </div>
-              <CheckCircle className="h-8 w-8 text-emerald-500" />
+              <Shield className="h-8 w-8 text-emerald-500" />
             </div>
           </CardContent>
         </Card>
@@ -114,226 +269,317 @@ export function Access() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Access Requests</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {accessRequests.map((request) => {
-              const statusInfo = statusConfig[request.status];
-              const StatusIcon = statusInfo.icon;
-
-              return (
-                <div
-                  key={request.id}
-                  className="rounded-lg border border-border p-6"
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(0,1.5fr)_auto]">
+            <div>
+              <CardTitle>Provisioning queue</CardTitle>
+              <p className="text-sm text-muted-foreground">Review active provisioning requests by SLA and status.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={searchTerm}
+                  onChange={(event) => {
+                    setSearchTerm(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search provisioning"
+                  className="pl-10"
+                />
+              </div>
+              <select
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition focus:border-ring focus:ring-1 focus:ring-ring"
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setPage(1);
+                }}
+              >
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <select
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition focus:border-ring focus:ring-1 focus:ring-ring"
+                  value={`${sortKey}:${sortDirection}`}
+                  onChange={(event) => {
+                    const [key, direction] = event.target.value.split(':') as [typeof sortKey, 'asc' | 'desc'];
+                    setSortKey(key);
+                    setSortDirection(direction);
+                  }}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                        {request.candidateName.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">{request.candidateName}</h3>
-                        <p className="text-sm text-muted-foreground">{request.department}</p>
+                  {sortOptions.map((option) => (
+                    <option key={`${option.value}:desc`} value={`${option.value}:desc`}>
+                      {option.label} descending
+                    </option>
+                  ))}
+                  {sortOptions.map((option) => (
+                    <option key={`${option.value}:asc`} value={`${option.value}:asc`}>
+                      {option.label} ascending
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            </div>
+          </CardHeader>
+        
+        <CardContent>
+          {error ? (
+            <div className="space-y-4 rounded-lg border border-red-200 bg-red-50 p-6">
+              <p className="font-medium text-red-900">Unable to load provisioning requests</p>
+              <p className="text-sm text-red-700">{error}</p>
+              <Button variant="outline" onClick={fetchRequests}>
+                Retry
+              </Button>
+            </div>
+          ) : isLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-12 w-full rounded-md" />
+              <Skeleton className="h-72 w-full rounded-md" />
+            </div>
+          ) : canShowEmpty ? (
+            <div className="space-y-4 rounded-lg border border-dashed border-border bg-background p-8 text-center">
+              <p className="text-lg font-semibold">No provisioning requests</p>
+              <p className="text-sm text-muted-foreground">Create a new request to begin access provisioning for a candidate.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {pagedRequests.map((request) => {
+                const progressCount = getChecklist(request).filter((item) => item.completed).length;
+                const progress = Math.round((progressCount / 5) * 100);
 
-                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">AD Account</p>
-                            <p className="mt-1 text-sm font-medium">
-                              {request.adAccount || 'Pending'}
-                            </p>
+                return (
+                  <Card key={request._id} className="border-border">
+                    <CardContent>
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">{request.candidateEmail || 'No email provided'}</p>
+                          <h3 className="text-lg font-semibold">{request.candidateName}</h3>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <StatusBadge status={request.provisioningStatus} />
+                          <SLAIndicator deadline={request.slaDeadline} />
+                        </div>
+                      </div>
+
+                      <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_280px]">
+                        <div>
+                          <ProvisioningChecklist items={getChecklist(request)} />
+                        </div>
+                        <div className="rounded-lg border border-border bg-slate-50 p-4">
+                          <div className="flex items-center justify-between text-sm text-muted-foreground">
+                            <span>Completion</span>
+                            <span>{progress}%</span>
                           </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Badge Number</p>
-                            <p className="mt-1 text-sm font-medium">
-                              {request.badgeNumber || 'Pending'}
-                            </p>
+                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                            <div className="h-2 rounded-full bg-blue-600" style={{ width: `${progress}%` }} />
                           </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Completion Date</p>
-                            <p className="mt-1 text-sm font-medium">
-                              {request.completedDate || 'Pending'}
-                            </p>
+                          <div className="mt-4 space-y-2">
+                            <div className="rounded-lg bg-white p-3 shadow-sm">
+                              <p className="text-xs text-muted-foreground">System access</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {request.systemAccess.length ? (
+                                  request.systemAccess.map((item) => (
+                                    <Badge key={item} variant="default">
+                                      {item}
+                                    </Badge>
+                                  ))
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">No systems assigned</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="rounded-lg bg-white p-3 shadow-sm">
+                              <p className="text-xs text-muted-foreground">Notes</p>
+                              <p className="mt-2 text-sm text-slate-700">{request.notes || 'No additional notes'}</p>
+                            </div>
                           </div>
                         </div>
-
-                        <div className="mt-4">
-                          <p className="mb-2 text-xs font-medium text-muted-foreground">
-                            Services ({request.services.length})
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {request.services.map((service) => (
-                              <Badge key={service} variant="default">
-                                {service}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
                       </div>
-                    </div>
 
-                    <Badge variant={statusInfo.variant} className="gap-1">
-                      <StatusIcon className="h-3 w-3" />
-                      {statusInfo.label}
-                    </Badge>
+                      <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
+                        {(request.provisioningStatus === 'NOT_STARTED' || request.provisioningStatus === 'FAILED') && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              setActiveRequestId(request._id);
+                              setConfirmAction('start');
+                              setIsAlertOpen(true);
+                            }}
+                          >
+                            Start provisioning
+                          </Button>
+                        )}
+                        {request.provisioningStatus === 'IN_PROGRESS' && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setActiveRequestId(request._id);
+                              setConfirmAction('complete');
+                              setIsAlertOpen(true);
+                            }}
+                          >
+                            Complete provisioning
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" onClick={() => toast.success('View activity in Notifications')}>
+                          View activity
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+                  <div>
+                    Showing {(page - 1) * pageSize + 1}–{Math.min(filteredRequests.length, page * pageSize)} of {filteredRequests.length}
                   </div>
-
-                  {request.status !== 'completed' && (
-                    <div className="mt-4 flex gap-2 border-t border-border pt-4">
-                      <Button variant="primary" size="sm">
-                        Provision Services
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Send Credentials
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page === 1}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <span>
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Provisioning Workflow</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {[
-              {
-                step: 'AD Account Creation',
-                icon: Server,
-                status: 'completed',
-                details: 'Username and email generated',
-              },
-              {
-                step: 'Password & OTP Setup',
-                icon: Lock,
-                status: 'completed',
-                details: 'Temporary credentials sent',
-              },
-              {
-                step: 'Badge Access',
-                icon: CreditCard,
-                status: 'in_progress',
-                details: 'Physical badge printing',
-              },
-              {
-                step: 'Email Provisioning',
-                icon: Mail,
-                status: 'pending',
-                details: 'Mailbox creation pending',
-              },
-              {
-                step: 'System Access',
-                icon: Shield,
-                status: 'pending',
-                details: 'Application access grants',
-              },
-            ].map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <div key={index} className="flex items-start gap-3">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                      item.status === 'completed'
-                        ? 'bg-emerald-100'
-                        : item.status === 'in_progress'
-                        ? 'bg-blue-100'
-                        : 'bg-gray-100'
-                    }`}
-                  >
-                    <Icon
-                      className={`h-5 w-5 ${
-                        item.status === 'completed'
-                          ? 'text-emerald-600'
-                          : item.status === 'in_progress'
-                          ? 'text-blue-600'
-                          : 'text-gray-600'
-                      }`}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium">{item.step}</p>
-                      {item.status === 'completed' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-600" />
-                      )}
-                      {item.status === 'in_progress' && (
-                        <Clock className="h-4 w-4 text-blue-600" />
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{item.details}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.9fr]">
+        <WorkflowCard
+          title="Provisioning workflow"
+          steps={[
+            { title: 'Request intake', status: 'completed' },
+            { title: 'Account setup', status: metrics.inProgress ? 'in_progress' : 'completed' },
+            { title: 'Credential delivery', status: metrics.pending ? 'pending' : 'in_progress' },
+            { title: 'Ready to launch', status: metrics.completed ? 'completed' : 'pending' },
+          ]}
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle>Security Verification</CardTitle>
+            <CardTitle>IT operations</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-lg bg-emerald-50 p-4">
-              <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-border bg-slate-50 p-4">
+              <p className="text-sm text-muted-foreground">Operational readiness</p>
+              <p className="mt-2 text-lg font-semibold">Provisioning status and SLA warnings</p>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 rounded-lg border border-border p-4">
                 <CheckCircle className="mt-0.5 h-5 w-5 text-emerald-600" />
                 <div>
-                  <p className="font-medium text-emerald-900">Background Check Complete</p>
-                  <p className="mt-1 text-sm text-emerald-700">
-                    All security clearances verified and approved
-                  </p>
+                  <p className="font-medium">Fast handoffs</p>
+                  <p className="text-sm text-muted-foreground">Start provisioning with a single click and update progress in real time.</p>
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-lg bg-blue-50 p-4">
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 rounded-lg border border-border p-4">
                 <Shield className="mt-0.5 h-5 w-5 text-blue-600" />
                 <div>
-                  <p className="font-medium text-blue-900">2FA Enabled</p>
-                  <p className="mt-1 text-sm text-blue-700">
-                    Multi-factor authentication configured for all accounts
-                  </p>
+                  <p className="font-medium">Secure delivery</p>
+                  <p className="text-sm text-muted-foreground">OTP, access badges, and system privileges are tracked together.</p>
                 </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-purple-50 p-4">
-              <div className="flex items-start gap-3">
-                <Lock className="mt-0.5 h-5 w-5 text-purple-600" />
-                <div>
-                  <p className="font-medium text-purple-900">Access Policy Applied</p>
-                  <p className="mt-1 text-sm text-purple-700">
-                    Role-based access control configured per intern guidelines
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 border-t border-border pt-4">
-              <h4 className="font-semibold">Credential Delivery</h4>
-              <div className="flex items-center justify-between rounded-lg border border-border p-3">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm">OTP sent to email</span>
-                </div>
-                <Badge variant="success">Delivered</Badge>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-border p-3">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-purple-600" />
-                  <span className="text-sm">Badge ready for pickup</span>
-                </div>
-                <Badge variant="info">Ready</Badge>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>New access provisioning request</DialogTitle>
+            <DialogDescription>
+              Create a new provisioning workflow for a candidate and assign systems.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(handleCreate)} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Candidate name</label>
+                <Input {...register('candidateName', { required: true })} />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Candidate ID</label>
+                <Input {...register('candidateId', { required: true })} />
+              </div>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Candidate email</label>
+              <Input {...register('candidateEmail')} type="email" />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Systems to provision</label>
+              <Textarea {...register('systemAccess', { required: true })} rows={3} />
+              <p className="mt-2 text-xs text-muted-foreground">Comma-separated list of systems (example: Active Directory, Email, VPN).</p>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Notes</label>
+              <Textarea {...register('notes')} rows={4} />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={formState.isSubmitting}>
+                Submit request
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction === 'start' ? 'Start provisioning' : 'Complete provisioning'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction === 'start'
+                ? 'Move this request into active provisioning and notify the IT team.'
+                : 'Mark the provisioning workflow as complete and close the request.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsAlertOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (activeRequestId && confirmAction) {
+                  handleAction(activeRequestId, confirmAction);
+                }
+              }}
+            >
+              {confirmAction === 'start' ? 'Start now' : 'Complete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -119,6 +119,61 @@ export type OnboardingFormRecord = OnboardingPayload & {
   updatedAt?: string;
 };
 
+export type NonWorkerIdRequest = {
+  _id: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  employeeId?: string;
+  referralId?: string;
+  requestStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
+  requestedAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  completedAt?: string;
+  slaDeadline?: string;
+  notes?: string;
+  createdBy?: string;
+  updatedBy?: string;
+};
+
+export type NonWorkerIdPayload = {
+  candidateId?: string;
+  candidateName: string;
+  candidateEmail: string;
+  employeeId?: string;
+  referralId?: string;
+  notes?: string;
+};
+
+export type AccessProvisionRecord = {
+  _id: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail?: string;
+  adAccountCreated: boolean;
+  emailProvisioned: boolean;
+  vpnAccess: boolean;
+  badgeAccess: boolean;
+  otpSent: boolean;
+  systemAccess: string[];
+  provisioningStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+  slaDeadline?: string;
+  notes?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  completedAt?: string;
+  referralId?: string;
+};
+
+export type AccessProvisionPayload = {
+  candidateId: string;
+  candidateName: string;
+  candidateEmail?: string;
+  systemAccess?: string[];
+  notes?: string;
+};
+
 type StoredUser = Partial<AuthUser> & {
   _id?: string;
 };
@@ -340,6 +395,57 @@ export const api = {
     apiRequest<T>('/api/notifications/read-all', {
       method: 'PUT',
     }),
+  ids: {
+    list: <T = NonWorkerIdRequest[]>(params?: Record<string, string>) =>
+      apiRequest<T>('/api/ids', {
+        method: 'GET',
+        params,
+      }),
+    create: (data: NonWorkerIdPayload) =>
+      apiRequest<NonWorkerIdRequest>('/api/ids', {
+        method: 'POST',
+        data,
+      }),
+    approve: (id: string, comment?: string) =>
+      apiRequest<NonWorkerIdRequest>(`/api/ids/${id}/approve`, {
+        method: 'POST',
+        data: { comment },
+      }),
+    reject: (id: string, reason?: string) =>
+      apiRequest<NonWorkerIdRequest>(`/api/ids/${id}/reject`, {
+        method: 'POST',
+        data: { reason },
+      }),
+    complete: (id: string) =>
+      apiRequest<NonWorkerIdRequest>(`/api/ids/${id}/complete`, {
+        method: 'POST',
+      }),
+  },
+  access: {
+    list: <T = AccessProvisionRecord[]>(params?: Record<string, string>) =>
+      apiRequest<T>('/api/access', {
+        method: 'GET',
+        params,
+      }),
+    create: (data: AccessProvisionPayload) =>
+      apiRequest<AccessProvisionRecord>('/api/access', {
+        method: 'POST',
+        data,
+      }),
+    update: (id: string, data: Partial<AccessProvisionPayload & { provisioningStatus?: string }>) =>
+      apiRequest<AccessProvisionRecord>(`/api/access/${id}`, {
+        method: 'PUT',
+        data,
+      }),
+    start: (id: string) =>
+      apiRequest<AccessProvisionRecord>(`/api/access/${id}/start`, {
+        method: 'POST',
+      }),
+    complete: (id: string) =>
+      apiRequest<AccessProvisionRecord>(`/api/access/${id}/complete`, {
+        method: 'POST',
+      }),
+  },
   createOnboardingDraft: (data: FormData) =>
     apiRequest<OnboardingFormRecord>('/api/onboarding', {
       method: 'POST',
