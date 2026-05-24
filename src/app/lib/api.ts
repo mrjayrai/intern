@@ -174,6 +174,97 @@ export type AccessProvisionPayload = {
   notes?: string;
 };
 
+export type ReferralRecord = {
+  id?: string;
+  _id?: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  candidatePhone?: string;
+  skills?: string[];
+  education?: string;
+  internshipDuration?: string;
+  projectOverview?: string;
+  location?: string;
+  status?: string;
+  workflowStage?: string;
+  referrer?: string;
+  mentor?: string;
+  submittedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  slaDeadline?: string;
+  duplicate?: boolean;
+};
+
+export type WorkflowHistoryStage = {
+  stage: string;
+  status: 'completed' | 'in_progress' | 'pending' | 'overdue' | 'blocked';
+  actor?: string;
+  role?: string;
+  timestamp?: string;
+  durationMinutes?: number;
+  slaDeadline?: string;
+  notes?: string;
+  meta?: ApiRecord;
+};
+
+export type WorkflowHistoryRecord = {
+  _id?: string;
+  referralId?: string;
+  candidateId?: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  workflowStage?: string;
+  workflowStatus?: 'active' | 'delayed' | 'completed' | 'blocked';
+  startedAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  actor?: string;
+  timeline?: WorkflowHistoryStage[];
+  slaDeadline?: string;
+  durationMinutes?: number;
+  bottleneck?: boolean;
+  escalationLevel?: 'none' | 'watch' | 'escalated' | 'critical';
+  currentOwner?: string;
+  notes?: string;
+};
+
+export type ActivityFeedItem = {
+  _id?: string;
+  id?: string;
+  type:
+    | 'onboarding_update'
+    | 'approval_action'
+    | 'provisioning_update'
+    | 'certificate_issued'
+    | 'escalation'
+    | 'workflow_transition'
+    | 'extension_request';
+  title: string;
+  description?: string;
+  candidateName?: string;
+  actor?: string;
+  stage?: string;
+  status?: string;
+  timestamp: string;
+  referralId?: string;
+  workflowId?: string;
+  slaDeadline?: string;
+  severity?: 'low' | 'medium' | 'high';
+};
+
+export type ExtensionRequestRecord = {
+  _id: string;
+  candidateId: string;
+  reason: string;
+  requestedDays: number;
+  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  comments?: string;
+  approvedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 type StoredUser = Partial<AuthUser> & {
   _id?: string;
 };
@@ -351,7 +442,7 @@ export const api = {
     }),
   logout: () => apiRequest('/api/auth/logout', { method: 'POST' }),
   dashboard: <T = ApiRecord>() => apiRequest<T>('/api/dashboard'),
-  referrals: <T = ApiRecord[]>() => apiRequest<T>('/api/referrals'),
+  referrals: <T = ReferralRecord[]>() => apiRequest<T>('/api/referrals'),
   createReferral: (data: FormData) =>
     apiRequest('/api/referrals', {
       method: 'POST',
@@ -447,7 +538,7 @@ export const api = {
       }),
   },
   createOnboardingDraft: (data: FormData) =>
-    apiRequest<OnboardingFormRecord>('/api/onboarding', {
+  apiRequest<OnboardingFormRecord>('/api/onboarding', {
       method: 'POST',
       data,
     }),
@@ -466,4 +557,29 @@ export const api = {
     apiRequest<OnboardingFormRecord>(`/api/onboarding/${id}/submit`, {
       method: 'POST',
     }),
+  tracking: {
+    getWorkflowHistory: (referralId: string) =>
+      apiRequest<WorkflowHistoryRecord>(`/api/tracking/workflow-history/${referralId}`),
+    getActivityFeed: (params?: { limit?: number; since?: string }) =>
+      apiRequest<ActivityFeedItem[]>('/api/tracking/activity-feed', {
+        params,
+      }),
+    getCandidateTracking: (candidateId: string) =>
+      apiRequest<ApiRecord>(`/api/tracking/${candidateId}`),
+    requestExtension: (data: { candidateId: string; reason: string; requestedDays: number }) =>
+      apiRequest<ExtensionRequestRecord>('/api/tracking/extension-request', {
+        method: 'POST',
+        data,
+      }),
+    approveExtension: (id: string, comments?: string) =>
+      apiRequest<ExtensionRequestRecord>(`/api/tracking/extension-request/${id}/approve`, {
+        method: 'POST',
+        data: { comments },
+      }),
+    rejectExtension: (id: string, comments?: string) =>
+      apiRequest<ExtensionRequestRecord>(`/api/tracking/extension-request/${id}/reject`, {
+        method: 'POST',
+        data: { comments },
+      }),
+  },
 };

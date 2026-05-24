@@ -1,5 +1,6 @@
 const { WORKFLOW_TRANSITIONS, WORKFLOW_STAGES, WORKFLOW_SLA_DAYS } = require('../constants/workflowStages');
 const WorkflowHistory = require('../models/WorkflowHistory');
+const trackingService = require('./trackingService');
 const NDA = require('../models/NDA');
 const notificationService = require('./notificationService');
 const ApiError = require('../utils/apiError');
@@ -24,19 +25,7 @@ const computeSlaDeadline = (stage, baseDate = new Date()) => {
   return deadline;
 };
 
-const buildWorkflowHistoryEntry = async ({ referralId, fromStage, toStage, performedBy, performedById, note, slaDeadline }) => {
-  const entry = new WorkflowHistory({
-    referralId,
-    fromStage,
-    toStage,
-    performedBy,
-    performedById,
-    note,
-    slaDeadline,
-  });
-
-  return entry.save();
-};
+// legacy helper retained for compatibility; prefer trackingService.recordTransition for richer behaviour
 
 const transitionReferralStage = async (referral, nextStage, actor = {}, note = '', explicitSlaDeadline) => {
   if (!referral) {
@@ -66,15 +55,24 @@ const transitionReferralStage = async (referral, nextStage, actor = {}, note = '
   referral.slaDeadline = slaDeadline;
 
   await referral.save();
-  await buildWorkflowHistoryEntry({
-    referralId: referral._id,
-    fromStage: currentStage,
-    toStage: nextStage,
-    performedBy: actor.name,
-    performedById: actor.id,
-    note,
-    slaDeadline,
-  });
+
+  // record transition with the tracking service (computes durations, SLA checks, notifications, audits)
+  try {
+    await trackingService.recordTransition({
+      referralId: referral._id,
+      onboardingId: referral.onboardingId,
+      workflowStage: nextStage,
+      previousStage: currentStage,
+      actorId: actor.id,
+      actorName: actor.name,
+      actorRole: actor.role,
+      action: 'TRANSITION',
+      notes: note,
+      metadata: { slaDeadline },
+    });
+  } catch (err) {
+    console.error('Failed to record workflow transition:', err?.message || err);
+  }
 
   try {
     const recipientId = referral.referrer || referral.mentor || actor.id;
