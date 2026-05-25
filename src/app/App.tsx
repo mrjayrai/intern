@@ -18,6 +18,7 @@ import { Documents } from './pages/Documents';
 import { IDs } from './pages/IDs';
 import { Tracking } from './pages/Tracking';
 import { Access } from './pages/Access';
+import { ReadyToStart } from './pages/ReadyToStart';
 import { Certificates } from './pages/Certificates';
 import { Reports } from './pages/Reports';
 import { AIAssistant } from './pages/AIAssistant';
@@ -52,6 +53,9 @@ export default function App() {
             </Route>
             <Route element={<RoleRoute allowedRoles={ROUTE_PERMISSIONS['/access']} />}>
               <Route path="/access" element={<Access />} />
+            </Route>
+            <Route element={<RoleRoute allowedRoles={['hr', 'superAdmin']} />}>
+              <Route path="/ready-to-start" element={<ReadyToStart />} />
             </Route>
             <Route path="/tracking" element={<Tracking />} />
             <Route path="/certificates" element={<Certificates />} />

@@ -14,5 +14,6 @@ router.put('/:id', authorize([ROLES.HR, ROLES.MENTOR, ROLES.REFERRER, ROLES.IT, 
 router.delete('/:id', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), referralController.deleteReferral);
 router.post('/:id/approve', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), referralController.approveReferral);
 router.post('/:id/reject', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), referralController.rejectReferral);
+router.post('/:id/activate', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), referralController.activateInternship);
 
 module.exports = router;

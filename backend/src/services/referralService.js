@@ -459,6 +459,67 @@ const rejectReferral = async (id, actor = {}, reason = '') => {
   return { referral };
 };
 
+const activateInternship = async (id, actor = {}, options = {}) => {
+  const referral = await Referral.findById(id);
+  if (!referral) {
+    throw new ApiError(404, 'Referral not found');
+  }
+
+  if (referral.workflowStage !== workflowService.WORKFLOW_STAGES.READY_TO_START) {
+    throw new ApiError(400, `Cannot activate internship. Current stage is ${referral.workflowStage}, expected READY_TO_START.`);
+  }
+
+  console.log(`[Internship Activation] Activating internship for referral ${id} by ${actor.email || actor.name || 'system'}`);
+
+  // Transition to ACTIVE
+  await workflowService.transitionReferralStage(
+    referral,
+    workflowService.WORKFLOW_STAGES.ACTIVE,
+    actor,
+    options.notes || 'Internship activated - candidate is now live'
+  );
+
+  // Update referral status and start date
+  referral.status = 'ACTIVE';
+  if (options.startDate) {
+    referral.internshipStartDate = new Date(options.startDate);
+  }
+  await referral.save();
+
+  // Create audit log
+  await auditService.createAuditLog({
+    action: 'ACTIVATE_INTERNSHIP',
+    resourceType: 'Referral',
+    resourceId: referral._id,
+    performedBy: actor.name,
+    performedById: actor.id,
+    details: {
+      candidateName: referral.candidateName,
+      startDate: options.startDate || new Date().toISOString(),
+      notes: options.notes || 'Internship activated',
+    },
+  });
+
+  // Send notification to candidate
+  try {
+    if (referral.candidateEmail) {
+      await emailService.enqueueEmail(referral.candidateEmail, 'internshipActivated', {
+        name: referral.candidateName,
+        startDate: options.startDate || new Date().toLocaleDateString(),
+      });
+
+      emailService.processQueue(10).catch((queueErr) => {
+        console.error('[Internship Activation] Email queue processing error:', queueErr?.message || queueErr);
+      });
+    }
+  } catch (err) {
+    console.error('[Internship Activation] Failed to send activation email:', err?.message || err);
+  }
+
+  console.log(`[Internship Activation] ✅ Internship activated successfully for ${referral.candidateName}`);
+  return referral;
+};
+
 const processAIScoring = async (referralId, resumePath, candidateSkills = []) => {
   try {
     const referral = await Referral.findById(referralId);
@@ -678,5 +739,6 @@ module.exports = {
   deleteReferral,
   approveReferral,
   rejectReferral,
+  activateInternship,
   processAIScoring,
 };

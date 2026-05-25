@@ -9,6 +9,7 @@ const nonWorkerIdApproved = require('./nonWorkerIdApproved');
 const nonWorkerIdRejected = require('./nonWorkerIdRejected');
 const accessProvisioningStarted = require('./accessProvisioningStarted');
 const accessProvisioningCompleted = require('./accessProvisioningCompleted');
+const internshipActivated = require('./internshipActivated');
 const onboardingUpdate = require('./onboardingUpdate');
 const onboardingInitiation = require('./onboardingInitiation');
 const onboardingInvitation = require('./onboardingInvitation');
@@ -27,6 +28,7 @@ module.exports = {
   nonWorkerIdRejected,
   accessProvisioningStarted,
   accessProvisioningCompleted,
+  internshipActivated,
   onboardingUpdate,
   onboardingInitiation,
   onboardingInvitation,

@@ -607,6 +607,11 @@ export const api = {
       method: 'POST',
       data: { reason },
     }),
+  activateInternship: (id: string, startDate?: string, notes?: string) =>
+    apiRequest(`/api/referrals/${id}/activate`, {
+      method: 'POST',
+      data: { startDate, notes },
+    }),
   parseResume: (data: FormData, onUploadProgress?: ApiRequestConfig['onUploadProgress']) =>
     apiRequest<ResumeParseResult>('/api/resumes/parse', {
       method: 'POST',

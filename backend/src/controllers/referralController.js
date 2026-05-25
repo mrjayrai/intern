@@ -89,3 +89,19 @@ exports.rejectReferral = asyncHandler(async (req, res) => {
     },
   });
 });
+
+exports.activateInternship = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { startDate, notes } = req.body;
+  console.log(`[Internship Activation] API called by ${req.user.email} for referral ${id}`);
+  const referral = await referralService.activateInternship(id, req.user, { startDate, notes });
+  res.status(200).json({
+    success: true,
+    message: 'Internship activated successfully',
+    data: {
+      referral,
+      workflowStage: referral.workflowStage,
+      status: referral.status,
+    },
+  });
+});
