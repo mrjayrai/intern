@@ -4,8 +4,11 @@ const auditService = require('../services/auditService');
 const workflowService = require('../services/workflowService');
 const notificationService = require('../services/notificationService');
 const emailService = require('../services/emailService');
+const onboardingService = require('../services/onboardingService');
 const aiScoringService = require('../services/aiScoringService');
 const fs = require('fs').promises;
+const path = require('path');
+const { createOfferLetterPdf } = require('../utils/pdfGenerator');
 
 const createReferral = async (data, actor = {}) => {
   const referralData = { ...data };
@@ -74,6 +77,100 @@ const getAllReferrals = async (filters = {}) => Referral.find(filters).sort({ cr
 
 const getReferralById = async (id) => Referral.findById(id);
 
+const buildCandidateRole = (referral) => {
+  const overview = `${referral.projectOverview || ''} ${referral.education || ''}`.toLowerCase();
+  if (overview.includes('design')) return 'Design Intern';
+  if (overview.includes('data')) return 'Data Intern';
+  if (overview.includes('marketing')) return 'Marketing Intern';
+  return 'Intern';
+};
+
+const getReferralDepartment = (referral) => referral.location || 'General';
+
+const getMentorName = async (referral) => {
+  if (!referral.mentor) return 'To be assigned';
+  const User = require('../models/User');
+  const mentor = await User.findById(referral.mentor).select('name');
+  return mentor?.name || 'To be assigned';
+};
+
+const createOnboardingAndOffer = async (referral, actor) => {
+  const onboarding = await onboardingService.createJoiningFormDraft(
+    {
+      referralId: referral._id,
+      candidateId: referral.candidateId || referral._id,
+      candidateEmail: referral.candidateEmail,
+      candidateName: referral.candidateName,
+      status: 'DRAFT',
+      workflowStage: 'ONBOARDING_PENDING',
+      personalDetails: {
+        firstName: referral.candidateName?.split(' ')[0] || referral.candidateName,
+        email: referral.candidateEmail,
+        phone: referral.candidatePhone,
+      },
+    },
+    { id: actor.id, email: actor.email, name: actor.name, role: actor.role },
+    []
+  );
+
+  const mentorName = await getMentorName(referral);
+  const offerLetterData = {
+    candidateName: referral.candidateName,
+    candidateEmail: referral.candidateEmail,
+    role: buildCandidateRole(referral),
+    department: getReferralDepartment(referral),
+    mentor: mentorName,
+    mentorEmail: '',
+    duration: referral.internshipDuration || 'TBD',
+    joiningDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    stipend: '',
+    location: referral.location || 'Remote',
+    referenceId: `RF-${String(referral._id).slice(-8).toUpperCase()}`,
+    issuedByName: actor.name || 'Intern Flow HR Team',
+  };
+
+  const offerLetterPath = await createOfferLetterPdf(offerLetterData);
+  const resolvedOfferLetterPath = path.resolve(path.join(__dirname, '..', offerLetterPath));
+
+  if (referral.candidateEmail) {
+    await emailService.enqueueEmail(
+      referral.candidateEmail,
+      'onboardingInitiation',
+      {
+        name: referral.candidateName,
+        candidateName: referral.candidateName,
+        role: offerLetterData.role,
+        department: offerLetterData.department,
+        mentor: offerLetterData.mentor,
+        joiningDate: offerLetterData.joiningDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+        onboardingPortalLink: `${process.env.APP_URL || 'http://localhost:5173'}/onboarding`,
+        hrContactEmail: process.env.HR_CONTACT_EMAIL || 'support@internflow.io',
+        offerLetterAttached: true,
+      },
+      {
+        attachments: [
+          {
+            filename: `Intern-Flow-Offer-Letter-${offerLetterData.referenceId}.pdf`,
+            path: resolvedOfferLetterPath,
+            contentType: 'application/pdf',
+          },
+        ],
+      }
+    );
+  }
+
+  await auditService.createAuditLog({
+    action: 'ONBOARDING_CREATED',
+    resourceType: 'Referral',
+    resourceId: referral._id,
+    performedBy: actor.name,
+    performedById: actor.id,
+    details: { onboardingId: onboarding?._id, offerLetterPath, candidateName: referral.candidateName },
+  });
+
+  return { onboarding, offerLetterPath };
+};
+
 const updateReferral = async (id, data, actor = {}) => {
   const referral = await Referral.findById(id);
   if (!referral) {
@@ -129,6 +226,110 @@ const deleteReferral = async (id, actor = {}) => {
   });
 
   return referral;
+};
+
+const approveReferral = async (id, actor = {}, comment = '') => {
+  const referral = await Referral.findById(id);
+  if (!referral) {
+    throw new ApiError(404, 'Referral not found');
+  }
+
+  if (referral.workflowStage !== workflowService.WORKFLOW_STAGES.HR_REVIEW_PENDING) {
+    throw new ApiError(400, 'Referral is not ready for HR approval');
+  }
+
+  console.log(`[HR Approval] clicked by ${actor.email || actor.name || 'system'} for referral ${id}`);
+
+  await workflowService.transitionReferralStage(
+    referral,
+    workflowService.WORKFLOW_STAGES.HR_APPROVED,
+    actor,
+    comment || 'HR approved referral'
+  );
+
+  await workflowService.transitionReferralStage(
+    referral,
+    workflowService.WORKFLOW_STAGES.ONBOARDING_PENDING,
+    actor,
+    'Onboarding created after HR approval'
+  );
+
+  referral.status = 'APPROVED';
+  await referral.save();
+
+  const { onboarding, offerLetterPath } = await createOnboardingAndOffer(referral, actor);
+
+  await auditService.createAuditLog({
+    action: 'APPROVE_REFERRAL',
+    resourceType: 'Referral',
+    resourceId: referral._id,
+    performedBy: actor.name,
+    performedById: actor.id,
+    details: { comment, candidateName: referral.candidateName, onboardingId: onboarding?._id, offerLetterPath },
+  });
+
+  try {
+    await notificationService.createNotification({
+      user: referral.referrer || actor.id,
+      title: 'Referral approved',
+      message: `${referral.candidateName} was approved and moved to onboarding.`,
+      type: 'WORKFLOW',
+      workflowStage: workflowService.WORKFLOW_STAGES.ONBOARDING_PENDING,
+      metadata: { referralId: referral._id, onboardingId: onboarding?._id, offerLetterPath },
+      performedByName: actor.name || 'System',
+      performedById: actor.id,
+    });
+  } catch (err) {
+    console.error('[HR Approval] notification failed:', err?.message || err);
+  }
+
+  return { referral, onboarding, offerLetterPath };
+};
+
+const rejectReferral = async (id, actor = {}, reason = '') => {
+  const referral = await Referral.findById(id);
+  if (!referral) {
+    throw new ApiError(404, 'Referral not found');
+  }
+
+  if (referral.workflowStage !== workflowService.WORKFLOW_STAGES.HR_REVIEW_PENDING) {
+    throw new ApiError(400, 'Referral is not ready for HR rejection');
+  }
+
+  console.log(`[HR Rejection] clicked by ${actor.email || actor.name || 'system'} for referral ${id}`);
+
+  await workflowService.transitionReferralStage(
+    referral,
+    workflowService.WORKFLOW_STAGES.HR_REJECTED,
+    actor,
+    reason || 'HR rejected referral'
+  );
+
+  referral.status = 'REJECTED';
+  await referral.save();
+
+  await auditService.createAuditLog({
+    action: 'REJECT_REFERRAL',
+    resourceType: 'Referral',
+    resourceId: referral._id,
+    performedBy: actor.name,
+    performedById: actor.id,
+    details: { reason: reason || 'No reason provided', candidateName: referral.candidateName },
+  });
+
+  try {
+    if (referral.candidateEmail) {
+      await emailService.enqueueEmail(referral.candidateEmail, 'referralReceived', {
+        name: referral.candidateName,
+        candidateName: referral.candidateName,
+        reason: reason || 'Your referral was not selected at this stage.',
+      });
+    }
+  } catch (err) {
+    console.error('[HR Rejection] email queue failed:', err?.message || err);
+  }
+
+  return { referral };
 };
 
 const processAIScoring = async (referralId, resumePath, candidateSkills = []) => {
@@ -348,5 +549,7 @@ module.exports = {
   getReferralById,
   updateReferral,
   deleteReferral,
+  approveReferral,
+  rejectReferral,
   processAIScoring,
 };

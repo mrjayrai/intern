@@ -36,6 +36,9 @@ export const ACTION_PERMISSIONS = {
   // NDA actions
   ndaApproval: ['superAdmin', 'hr', 'compliance'] as UserRole[],
   signNDA: ['candidate', 'employee'] as UserRole[],
+  // Referral actions
+  approveReferral: ['hr', 'superAdmin'] as UserRole[],
+  rejectReferral: ['hr', 'superAdmin'] as UserRole[],
   // Onboarding actions
   approveOnboarding: ['hr', 'superAdmin'] as UserRole[],
   // Access provisioning
@@ -78,4 +81,12 @@ export function canAccessRoute(role: UserRole | undefined, path: string): boolea
   const allowed = ROUTE_PERMISSIONS[path];
   if (!allowed) return true;
   return allowed.includes(role);
+}
+
+export function canApproveReferral(role: UserRole | undefined): boolean {
+  return hasPermission(role, 'approveReferral');
+}
+
+export function canRejectReferral(role: UserRole | undefined): boolean {
+  return hasPermission(role, 'rejectReferral');
 }

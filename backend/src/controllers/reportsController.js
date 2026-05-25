@@ -22,16 +22,18 @@ const checkReportPermission = (userRole) => {
  */
 const logReportAccess = async (userId, reportType, filters) => {
   try {
+    console.log(`[Reports] Logging audit for report type: ${reportType}`);
     await auditService.createAuditLog({
       action: 'VIEW_REPORT',
       resourceType: 'Report',
-      resourceId: reportType,
+      resourceKey: reportType, // Use resourceKey for string identifiers
       performedById: userId,
       details: { filters, timestamp: new Date() },
     });
+    console.log(`[Reports] Audit log created for report: ${reportType}`);
   } catch (error) {
     // Don't fail the request if audit logging fails
-    console.error('Audit logging failed:', error);
+    console.error('[Reports] Audit logging failed:', error);
   }
 };
 
