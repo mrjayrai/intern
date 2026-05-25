@@ -45,10 +45,22 @@ const getAllNdas = async (filters = {}, query = {}) => {
   const dbQuery = {};
   if (filters.status) dbQuery.status = filters.status;
   if (filters.workflowStage) dbQuery.workflowStage = filters.workflowStage;
-  if (filters.candidateId) dbQuery.candidateId = filters.candidateId;
-  if (filters.candidateEmail) dbQuery.candidateEmail = filters.candidateEmail;
   if (filters.referralId) dbQuery.referral = filters.referralId;
   if (filters.title) dbQuery.title = new RegExp(filters.title, 'i');
+
+  // Candidate ownership filter: use OR logic (match EITHER candidateId OR candidateEmail)
+  if (filters.candidateId || filters.candidateEmail) {
+    const candidateOrConditions = [];
+    if (filters.candidateId) {
+      candidateOrConditions.push({ candidateId: filters.candidateId });
+    }
+    if (filters.candidateEmail) {
+      candidateOrConditions.push({ candidateEmail: filters.candidateEmail });
+    }
+    if (candidateOrConditions.length > 0) {
+      dbQuery.$or = candidateOrConditions;
+    }
+  }
 
   const page = Math.max(parseInt(query.page, 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(query.limit, 10) || 20, 1), 100);
@@ -217,6 +229,19 @@ const signNda = async (ndaId, signerInfo = {}, actor = {}) => {
   if (actor.role === ROLES.CANDIDATE) {
     const ownsNda = nda.candidateId?.toString() === actor.id?.toString() || nda.candidateEmail === actor.email;
     if (!ownsNda) {
+      console.warn(`[Security] Unauthorized NDA signing attempt by candidate ${actor.email} (ID: ${actor.id}) for NDA ${ndaId}`);
+      await auditService.createAuditLog({
+        action: 'UNAUTHORIZED_NDA_SIGN_ATTEMPT',
+        resourceType: 'NDA',
+        resourceId: ndaId,
+        performedBy: actor.name,
+        performedById: actor.id,
+        details: {
+          reason: 'Candidate attempted to sign NDA not assigned to them',
+          candidateEmail: actor.email,
+          ndaCandidateEmail: nda.candidateEmail,
+        },
+      });
       throw new ApiError(403, 'Forbidden: cannot sign this NDA');
     }
   }

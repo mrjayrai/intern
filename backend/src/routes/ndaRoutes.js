@@ -9,8 +9,8 @@ const { ROLES } = require('../constants/roles');
 router.use(authMiddleware);
 
 router.post('/', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN]), uploadNda, ndaController.createNda);
-router.get('/', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN, ROLES.MENTOR, ROLES.REFERRER, ROLES.CANDIDATE]), ndaController.listNdas);
-router.get('/:id', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN, ROLES.MENTOR, ROLES.REFERRER, ROLES.CANDIDATE]), ndaController.getNda);
+router.get('/', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN, ROLES.CANDIDATE]), ndaController.listNdas);
+router.get('/:id', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN, ROLES.CANDIDATE]), ndaController.getNda);
 router.put('/:id', authorize([ROLES.HR, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN]), uploadNda, ndaController.updateNda);
 router.delete('/:id', authorize([ROLES.SUPER_ADMIN]), ndaController.deleteNda);
 

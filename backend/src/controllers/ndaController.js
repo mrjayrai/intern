@@ -30,9 +30,15 @@ exports.listNdas = asyncHandler(async (req, res) => {
   if (req.user.role === ROLES.CANDIDATE) {
     filters.candidateId = req.user.id;
     filters.candidateEmail = req.user.email;
+    console.log(`[NDA] Candidate ${req.user.email} (ID: ${req.user.id}) listing their NDAs`);
   }
 
   const results = await ndaService.getAllNdas(filters, req.query);
+
+  if (req.user.role === ROLES.CANDIDATE && results.data.length === 0) {
+    console.log(`[NDA] No NDAs found for candidate ${req.user.email}. Filters used:`, { candidateId: filters.candidateId, candidateEmail: filters.candidateEmail });
+  }
+
   return res.status(200).json({ success: true, data: results });
 });
 
@@ -40,6 +46,7 @@ exports.getNda = asyncHandler(async (req, res) => {
   const nda = await ndaService.getNdaById(req.params.id);
   if (!nda) throw new ApiError(404, 'NDA not found');
   if (req.user.role === ROLES.CANDIDATE && !isCandidateOwner(nda, req.user)) {
+    console.warn(`[Security] Unauthorized NDA access attempt by candidate ${req.user.email} (ID: ${req.user.id}) for NDA ${req.params.id}`);
     throw new ApiError(403, 'Forbidden: cannot access this NDA');
   }
   return res.status(200).json({ success: true, data: nda });

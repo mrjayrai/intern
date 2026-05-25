@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
-import { api, getAccessToken, type ApiRecord } from '../lib/api';
+import { api, getAccessToken, getStoredUser, type ApiRecord } from '../lib/api';
 import { CandidateSelect, type CandidateOption } from '../components/CandidateSelect';
 import {
   AlertTriangle,
@@ -123,6 +123,10 @@ function CertificatesSkeleton() {
 }
 
 export function Certificates() {
+  const currentUser = getStoredUser();
+  const role = currentUser?.role;
+  const canIssue = role === 'hr' || role === 'superAdmin';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -250,10 +254,12 @@ export function Certificates() {
             <RefreshCcw className="h-4 w-4" />
             Retry
           </Button>
-          <Button variant="primary" className="gap-2" onClick={() => setIsIssueOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Issue Certificate
-          </Button>
+          {canIssue && (
+            <Button variant="primary" className="gap-2" onClick={() => setIsIssueOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Issue Certificate
+            </Button>
+          )}
         </div>
       </div>
 
@@ -430,15 +436,19 @@ export function Certificates() {
               <Award className="h-10 w-10 text-muted-foreground" />
               <h3 className="mt-4 font-semibold">No certificates found</h3>
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                Issue a certificate when an internship is complete, or retry after the backend has certificate records.
+                {canIssue
+                  ? 'Issue a certificate when an internship is complete, or retry after the backend has certificate records.'
+                  : 'No certificates have been issued yet. Contact HR for assistance.'}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <Button variant="outline" onClick={loadCertificates}>
                   Retry
                 </Button>
-                <Button variant="primary" onClick={() => setIsIssueOpen(true)}>
-                  Issue Certificate
-                </Button>
+                {canIssue && (
+                  <Button variant="primary" onClick={() => setIsIssueOpen(true)}>
+                    Issue Certificate
+                  </Button>
+                )}
               </div>
             </div>
           )}

@@ -46,7 +46,7 @@ exports.downloadCertificate = asyncHandler(async (req, res, next) => {
   }
 
   // Ownership validation: candidates can only download their own certificates
-  if (user.role === ROLES.CANDIDATE && certificate.candidateEmail !== user.email) {
+  if (user && user.role === ROLES.CANDIDATE && certificate.candidateEmail !== user.email) {
     console.warn(`[Security] Unauthorized certificate download attempt by ${user.email} for certificate ${req.params.id}`);
     throw new ApiError(403, 'Forbidden: Cannot download certificates for other candidates');
   }

@@ -10,12 +10,12 @@ const authMiddleware = require('../middleware/authMiddleware');
 const authorize = require('../middleware/roleMiddleware');
 const { ROLES } = require('../constants/roles');
 
-router.get('/download/:id', downloadCertificate);
-
+// All routes require authentication
 router.use(authMiddleware);
 
 router.get('/', listCertificates);
 router.get('/:id', getCertificateById);
-router.post('/issue', authorize([ROLES.HR, ROLES.MENTOR, ROLES.SUPER_ADMIN]), issueCertificate);
+router.get('/download/:id', downloadCertificate);
+router.post('/issue', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), issueCertificate);
 
 module.exports = router;

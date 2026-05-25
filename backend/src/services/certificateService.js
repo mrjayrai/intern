@@ -54,6 +54,12 @@ const issueCertificate = async (payload, user) => {
     throw new ApiError(400, 'Validation failed', errors);
   }
 
+  // Validate completion date is not in the future
+  const completionDate = new Date(payload.completionDate);
+  if (completionDate > new Date()) {
+    throw new ApiError(400, 'Certificate cannot be issued for a future completion date');
+  }
+
   // Idempotency guard: Check if certificate already exists for this referral
   if (payload.referralId) {
     const existingCertificate = await Certificate.findOne({
@@ -64,6 +70,21 @@ const issueCertificate = async (payload, user) => {
       console.log('[Certificate] Certificate already exists for referral:', payload.referralId);
       throw new ApiError(400, 'Certificate already issued for this referral');
     }
+
+    // Workflow eligibility validation
+    const referral = await Referral.findById(payload.referralId);
+    if (!referral) {
+      throw new ApiError(404, 'Referral not found');
+    }
+
+    // Certificate can only be issued if internship is completed
+    const eligibleStages = [WORKFLOW_STAGES.COMPLETED, WORKFLOW_STAGES.CERTIFICATE_PENDING];
+    if (!eligibleStages.includes(referral.workflowStage)) {
+      console.warn(`[Security] Certificate issuance attempt for ineligible workflow stage: ${referral.workflowStage} (referral: ${payload.referralId})`);
+      throw new ApiError(400, `Certificate cannot be issued before internship completion. Current stage: ${referral.workflowStage}. Required stages: COMPLETED or CERTIFICATE_PENDING.`);
+    }
+
+    console.log(`[Certificate] Workflow eligibility validated for referral ${payload.referralId}: stage ${referral.workflowStage}`);
   }
 
   const certificateData = buildCertificateData(payload, user);
@@ -111,10 +132,8 @@ const issueCertificate = async (payload, user) => {
   }
 
   if (payload.referralId) {
+    // Referral already fetched and validated in eligibility check above
     const referral = await Referral.findById(payload.referralId);
-    if (!referral) {
-      throw new ApiError(404, 'Referral not found');
-    }
 
     await workflowService.transitionReferralStage(
       referral,
