@@ -182,12 +182,14 @@ const approveRequest = async (id, user = {}, comment = '') => {
     console.error('Failed to send nonWorkerIdApproved email', err.message || err);
   }
 
-  // start access provisioning when ID approved
+  // Automatic trigger: Create access provisioning after ID approval
   try {
+    console.log(`[NonWorkerID] Triggering access provisioning for candidate ${rec.candidateName} after ID approval`);
     const accessService = require('./accessProvisionService');
     await accessService.createProvision({ referralId: rec.referralId, candidateId: rec.candidateId, candidateName: rec.candidateName }, user);
+    console.log(`[NonWorkerID] Access provisioning created successfully for ${rec.candidateName}`);
   } catch (err) {
-    console.error('Failed to create access provision after ID approve', err.message || err);
+    console.error(`[NonWorkerID] Failed to create access provision after ID approve:`, err.message || err);
   }
 
   return rec;

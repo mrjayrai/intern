@@ -84,8 +84,66 @@ const getActivityFeed = async ({ limit = 100, since } = {}) => {
     .lean();
 };
 
+/**
+ * Build a structured workflow timeline for frontend consumption
+ * Transforms raw history entries into a timeline with current status
+ */
+const buildWorkflowTimeline = async (referralId) => {
+  const referral = await Referral.findById(referralId).lean();
+  if (!referral) return null;
+
+  const historyEntries = await WorkflowHistory.find({ referralId }).sort({ createdAt: 1 }).lean();
+
+  // Build timeline from history entries
+  const timeline = historyEntries.map((entry) => {
+    const now = new Date();
+    const slaDeadline = entry.metadata?.slaDeadline ? new Date(entry.metadata.slaDeadline) : null;
+    const isOverdue = slaDeadline && slaDeadline < now;
+
+    // Determine status based on whether this is the current stage
+    let status = 'completed';
+    if (entry.workflowStage === referral.workflowStage) {
+      status = isOverdue ? 'overdue' : 'in_progress';
+    }
+
+    return {
+      stage: entry.workflowStage,
+      status,
+      actor: entry.actorName,
+      role: entry.actorRole,
+      timestamp: entry.createdAt,
+      durationMinutes: entry.durationInStage ? Math.round(entry.durationInStage / 60) : undefined,
+      slaDeadline: slaDeadline ? slaDeadline.toISOString() : undefined,
+      notes: entry.notes,
+      meta: entry.metadata,
+    };
+  });
+
+  // Determine overall workflow status
+  const now = new Date();
+  const slaOverdue = referral.slaDeadline && new Date(referral.slaDeadline) < now;
+  const workflowStatus = slaOverdue ? 'delayed' : 'active';
+
+  return {
+    _id: referral._id,
+    referralId: referral._id,
+    candidateId: referral.candidateId,
+    candidateName: referral.candidateName,
+    candidateEmail: referral.candidateEmail,
+    workflowStage: referral.workflowStage,
+    workflowStatus,
+    startedAt: referral.createdAt,
+    updatedAt: referral.updatedAt,
+    actor: historyEntries.length > 0 ? historyEntries[historyEntries.length - 1].actorName : undefined,
+    timeline,
+    slaDeadline: referral.slaDeadline,
+    escalationLevel: slaOverdue ? 'watch' : 'none',
+  };
+};
+
 module.exports = {
   recordTransition,
   getWorkflowHistory,
   getActivityFeed,
+  buildWorkflowTimeline,
 };

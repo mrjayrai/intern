@@ -34,6 +34,19 @@ const createProvision = async (data = {}, user = {}) => {
 
   await auditService.createAuditLog({ action: 'CREATE', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: { candidateId: data.candidateId } });
 
+  // Transition referral to ACCESS_PROVISIONING stage when provision is created
+  try {
+    if (rec.referralId) {
+      const referral = await Referral.findById(rec.referralId);
+      if (referral && workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.ACCESS_PROVISIONING)) {
+        console.log(`[AccessProvision] Transitioning referral ${referral._id} to ACCESS_PROVISIONING stage`);
+        await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.ACCESS_PROVISIONING, { name: user.name || 'System', id: user.id }, 'Access provisioning initiated');
+      }
+    }
+  } catch (err) {
+    console.error('[AccessProvision] Failed to transition workflow stage:', err.message || err);
+  }
+
   // notify IT/admin
   try {
     if (rec.createdBy) {
@@ -146,16 +159,31 @@ const completeProvision = async (id, user = {}) => {
     console.error('Failed to send accessProvisioningCompleted email', err.message || err);
   }
 
-  // transition referral to READY_TO_START if workflow allows
+  // transition referral workflow: ACCESS_PROVISIONING → READY_TO_START → ACTIVE
   try {
     if (rec.referralId) {
       const referral = await Referral.findById(rec.referralId);
-      if (referral && workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.READY_TO_START)) {
-        await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.READY_TO_START, { name: user.name, id: user.id }, 'Access provisioning completed');
+      if (referral) {
+        console.log(`[AccessProvision] Workflow transition starting for referral ${referral._id} | Current stage: ${referral.workflowStage}`);
+
+        // Step 1: Transition to READY_TO_START
+        if (workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.READY_TO_START)) {
+          await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.READY_TO_START, { name: user.name, id: user.id }, 'Access provisioning completed - ready to start');
+          console.log(`[AccessProvision] Transitioned to READY_TO_START`);
+
+          // Reload referral to get updated stage
+          await referral.reload();
+        }
+
+        // Step 2: Immediately transition to ACTIVE (internship begins)
+        if (workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.ACTIVE)) {
+          await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.ACTIVE, { name: user.name || 'System', id: user.id }, 'Internship activated - all prerequisites complete');
+          console.log(`[AccessProvision] Internship activated - transitioned to ACTIVE`);
+        }
       }
     }
   } catch (err) {
-    console.error('workflow transition after access complete failed', err.message || err);
+    console.error('[AccessProvision] Workflow transition after access complete failed:', err.message || err);
   }
 
   return rec;

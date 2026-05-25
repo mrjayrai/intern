@@ -68,6 +68,7 @@ const transitionReferralStage = async (referral, nextStage, actor = {}, note = '
   await referral.save();
 
   console.log(`[Workflow] Transition completed: ${referral._id} | ${currentStage} → ${nextStage}`);
+  console.log(`[Workflow] Updated referral status: workflowStage=${nextStage}, slaDeadline=${slaDeadline}`);
 
   // record transition with the tracking service (computes durations, SLA checks, notifications, audits)
   try {

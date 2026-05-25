@@ -37,8 +37,12 @@ const getActivityFeed = async (req, res, next) => {
 const getWorkflowHistory = async (req, res, next) => {
   try {
     const { referralId } = req.params;
-    const history = await trackingService.getWorkflowHistory(referralId);
-    res.json({ success: true, data: history });
+    // Return structured timeline instead of raw history entries
+    const timeline = await trackingService.buildWorkflowTimeline(referralId);
+    if (!timeline) {
+      throw new ApiError(404, 'Referral not found');
+    }
+    res.json({ success: true, data: timeline });
   } catch (err) {
     next(err);
   }
