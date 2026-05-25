@@ -80,8 +80,20 @@ exports.signNda = asyncHandler(async (req, res) => {
     userAgent: req.headers['user-agent'],
   };
 
+  console.log(`[NDA_SIGN_FLOW] Processing NDA signature for user ${actor.email} on NDA ${req.params.id}`);
+
   const nda = await ndaService.signNda(req.params.id, payload, actor);
-  return res.status(200).json({ success: true, data: nda });
+
+  console.log(`[NDA_API_RESPONSE] NDA signed successfully: ${nda._id}, status: ${nda.status}`);
+
+  // RULE 7: Standardized success response
+  return res.status(200).json({
+    success: true,
+    message: 'NDA signed successfully',
+    ndaStatus: nda.status,
+    workflowStage: nda.workflowStage,
+    data: nda
+  });
 });
 
 exports.approveNda = asyncHandler(async (req, res) => {

@@ -158,6 +158,23 @@ export function IDs() {
       return;
     }
 
+    // RULE 1 & 3: Check for existing active request
+    const candidateEmail = createCandidate?.candidateEmail ?? values.candidateEmail;
+    const activeStatuses = ['PENDING', 'APPROVED', 'COMPLETED'];
+    const existingActive = requests.find(
+      (req) =>
+        (req.candidateId === candidateId || req.candidateEmail === candidateEmail) &&
+        activeStatuses.includes(req.requestStatus)
+    );
+
+    if (existingActive) {
+      toast.error(
+        `An active Non-Worker ID request already exists for this candidate with status: ${existingActive.requestStatus}. ` +
+        `Please wait for it to be ${existingActive.requestStatus === 'PENDING' ? 'processed' : 'completed'} before creating a new request.`
+      );
+      return;
+    }
+
     const payload: NonWorkerIdPayload = {
       candidateId,
       candidateName: createCandidate?.candidateName ?? values.candidateName,

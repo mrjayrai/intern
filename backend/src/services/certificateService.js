@@ -141,6 +141,22 @@ const issueCertificate = async (payload, user) => {
       { name: issuedByName, id: user._id || user.id },
       'Certificate issued'
     );
+
+    // RULE 6: Auto-transition to COMPLETED after certificate issuance
+    console.log(`[CERTIFICATE_COMPLETION_TRIGGER] Certificate issued for ${certificate.candidate}, transitioning to COMPLETED`);
+
+    // Reload referral to get updated stage
+    await referral.reload();
+
+    if (workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.COMPLETED)) {
+      await workflowService.transitionReferralStage(
+        referral,
+        WORKFLOW_STAGES.COMPLETED,
+        { name: 'System', id: user._id || user.id },
+        'Internship completed - certificate issued'
+      );
+      console.log(`[CERTIFICATE_COMPLETION_TRIGGER] ✅ Internship marked as COMPLETED`);
+    }
   }
 
   await auditService.createAuditLog({

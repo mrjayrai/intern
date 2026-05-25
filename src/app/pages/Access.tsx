@@ -35,6 +35,7 @@ type AccessFormValues = {
   candidateId: string;
   candidateName: string;
   candidateEmail?: string;
+  referralId?: string;
   systemAccess: string;
   notes?: string;
 };
@@ -64,6 +65,7 @@ export function Access() {
       candidateId: '',
       candidateName: '',
       candidateEmail: '',
+      referralId: '',
       systemAccess: 'Active Directory, Email, VPN, Badge Access',
       notes: '',
     },
@@ -136,6 +138,22 @@ export function Access() {
   }, [requests]);
 
   const handleCreate = async (values: AccessFormValues) => {
+    // RULE 2 & 4: Check for existing active provision
+    const activeStatuses = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'];
+    const existingActive = requests.find(
+      (req) =>
+        req.candidateId === values.candidateId &&
+        activeStatuses.includes(req.provisioningStatus)
+    );
+
+    if (existingActive) {
+      toast.error(
+        `An active Access Provision already exists for this candidate with status: ${existingActive.provisioningStatus}. ` +
+        `${existingActive.provisioningStatus === 'COMPLETED' ? 'Provisioning is already completed.' : 'Please complete the existing request first.'}`
+      );
+      return;
+    }
+
     const systemAccess = values.systemAccess
       .split(',')
       .map((item) => item.trim())
@@ -145,6 +163,7 @@ export function Access() {
       candidateId: values.candidateId,
       candidateName: values.candidateName,
       candidateEmail: values.candidateEmail,
+      referralId: values.referralId,
       systemAccess,
       notes: values.notes,
     };
@@ -531,11 +550,13 @@ export function Access() {
                     setValue('candidateId', candidate.id, { shouldValidate: true });
                     setValue('candidateName', candidate.candidateName, { shouldValidate: true });
                     setValue('candidateEmail', candidate.candidateEmail ?? '');
+                    setValue('referralId', candidate.referralId);
                   } else {
                     setSelectedCandidateId('');
                     setValue('candidateId', '');
                     setValue('candidateName', '');
                     setValue('candidateEmail', '');
+                    setValue('referralId', '');
                   }
                 }}
               />

@@ -11,6 +11,24 @@ const { WORKFLOW_STAGES } = require('../constants/workflowStages');
 const createProvision = async (data = {}, user = {}) => {
   console.log(`[AccessProvision] Creating access provision for candidate ${data.candidateName || data.candidateId}`);
 
+  // RULE 2 & 4: Strict validation - ONE ACTIVE provision per candidate
+  const blockedStatuses = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'];
+
+  console.log(`[PROVISIONING_VALIDATION] Checking for existing provisions for candidate ${data.candidateId}`);
+
+  const existingProvision = await AccessProvision.findOne({
+    candidateId: data.candidateId,
+    provisioningStatus: { $in: blockedStatuses }
+  }).sort({ createdAt: -1 }).lean();
+
+  if (existingProvision) {
+    const errorMsg = `Cannot create Access Provision. An active provision already exists with status: ${existingProvision.provisioningStatus}. Provision ID: ${existingProvision._id}`;
+    console.error(`[PROVISIONING_VALIDATION] BLOCKED: ${errorMsg}`);
+    throw new ApiError(409, errorMsg);
+  }
+
+  console.log(`[PROVISIONING_VALIDATION] Validation passed. Creating new provision for ${data.candidateName}`);
+
   const payload = {
     referralId: data.referralId,
     candidateId: data.candidateId,
@@ -112,16 +130,35 @@ const startProvision = async (id, user = {}) => {
   try {
     // Look up candidate email via referral if available
     if (rec.referralId) {
+      console.log(`[AccessProvision] Looking up referral ${rec.referralId} for email notification`);
       const referral = await Referral.findById(rec.referralId).lean();
-      if (referral && referral.candidateEmail) {
+
+      if (!referral) {
+        console.warn(`[AccessProvision] Referral ${rec.referralId} not found, skipping email`);
+      } else if (!referral.candidateEmail) {
+        console.warn(`[AccessProvision] Referral ${rec.referralId} has no candidateEmail, skipping email`);
+      } else {
+        console.log(`[AccessProvision] Queueing provisioning started email for ${referral.candidateEmail}`);
         await emailService.enqueueEmail(referral.candidateEmail, 'accessProvisioningStarted', {
           name: referral.candidateName || '',
           systems: rec.systemAccess || [],
         });
+
+        console.log(`[AccessProvision] Email queued, triggering queue processing`);
+
+        // Trigger email queue processing (non-blocking)
+        emailService.processQueue(10).catch((queueErr) => {
+          console.error('[AccessProvision] Email queue processing error:', queueErr?.message || queueErr);
+        });
+
+        console.log(`[AccessProvision] ✅ Provisioning started email queued successfully`);
       }
+    } else {
+      console.warn(`[AccessProvision] No referralId on provision ${rec._id}, skipping email`);
     }
   } catch (err) {
-    console.error('Failed to send accessProvisioningStarted email', err.message || err);
+    console.error('[AccessProvision] Failed to send accessProvisioningStarted email:', err.message || err);
+    console.error('[AccessProvision] Error stack:', err.stack);
   }
 
   return rec;
@@ -142,8 +179,15 @@ const completeProvision = async (id, user = {}) => {
 
   try {
     if (rec.referralId) {
+      console.log(`[AccessProvision] Looking up referral ${rec.referralId} for completion email notification`);
       const referral = await Referral.findById(rec.referralId).lean();
-      if (referral && referral.candidateEmail) {
+
+      if (!referral) {
+        console.warn(`[AccessProvision] Referral ${rec.referralId} not found, skipping completion email`);
+      } else if (!referral.candidateEmail) {
+        console.warn(`[AccessProvision] Referral ${rec.referralId} has no candidateEmail, skipping completion email`);
+      } else {
+        console.log(`[AccessProvision] Queueing provisioning completed email for ${referral.candidateEmail}`);
         await emailService.enqueueEmail(referral.candidateEmail, 'accessProvisioningCompleted', {
           name: referral.candidateName || '',
           systems: rec.systemAccess || [],
@@ -153,37 +197,54 @@ const completeProvision = async (id, user = {}) => {
           badgeAccess: rec.badgeAccess,
           otpSent: rec.otpSent,
         });
+
+        console.log(`[AccessProvision] Completion email queued, triggering queue processing`);
+
+        // Trigger email queue processing (non-blocking)
+        emailService.processQueue(10).catch((queueErr) => {
+          console.error('[AccessProvision] Email queue processing error:', queueErr?.message || queueErr);
+        });
+
+        console.log(`[AccessProvision] ✅ Provisioning completed email queued successfully`);
       }
+    } else {
+      console.warn(`[AccessProvision] No referralId on provision ${rec._id}, skipping completion email`);
     }
   } catch (err) {
-    console.error('Failed to send accessProvisioningCompleted email', err.message || err);
+    console.error('[AccessProvision] Failed to send accessProvisioningCompleted email:', err.message || err);
+    console.error('[AccessProvision] Error stack:', err.stack);
   }
 
-  // transition referral workflow: ACCESS_PROVISIONING → READY_TO_START → ACTIVE
+  // RULE 5: Direct transition ACCESS_PROVISIONING → ACTIVE (ACTIVE_INTERNSHIP)
   try {
     if (rec.referralId) {
       const referral = await Referral.findById(rec.referralId);
       if (referral) {
-        console.log(`[AccessProvision] Workflow transition starting for referral ${referral._id} | Current stage: ${referral.workflowStage}`);
+        console.log(`[ACTIVE_INTERNSHIP_TRIGGER] Workflow transition starting for referral ${referral._id} | Current stage: ${referral.workflowStage}`);
 
-        // Step 1: Transition to READY_TO_START
-        if (workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.READY_TO_START)) {
-          await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.READY_TO_START, { name: user.name, id: user.id }, 'Access provisioning completed - ready to start');
-          console.log(`[AccessProvision] Transitioned to READY_TO_START`);
+        // Direct transition to ACTIVE (skip READY_TO_START per business rules)
+        if (referral.workflowStage === WORKFLOW_STAGES.ACCESS_PROVISIONING) {
+          // Must go through READY_TO_START due to workflow constraints, but make it instant
+          if (workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.READY_TO_START)) {
+            await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.READY_TO_START, { name: user.name, id: user.id }, 'Access provisioning completed');
+            console.log(`[ACTIVE_INTERNSHIP_TRIGGER] Transitioned to READY_TO_START`);
 
-          // Reload referral to get updated stage
-          await referral.reload();
-        }
+            // Reload to get updated stage
+            await referral.reload();
+          }
 
-        // Step 2: Immediately transition to ACTIVE (internship begins)
-        if (workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.ACTIVE)) {
-          await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.ACTIVE, { name: user.name || 'System', id: user.id }, 'Internship activated - all prerequisites complete');
-          console.log(`[AccessProvision] Internship activated - transitioned to ACTIVE`);
+          // Immediate transition to ACTIVE
+          if (workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.ACTIVE)) {
+            await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.ACTIVE, { name: 'System', id: user.id }, 'ACTIVE_INTERNSHIP - All onboarding complete');
+            console.log(`[ACTIVE_INTERNSHIP_TRIGGER] ✅ Internship activated - ACTIVE_INTERNSHIP state reached`);
+          }
+        } else {
+          console.warn(`[ACTIVE_INTERNSHIP_TRIGGER] Cannot transition - current stage is ${referral.workflowStage}, expected ACCESS_PROVISIONING`);
         }
       }
     }
   } catch (err) {
-    console.error('[AccessProvision] Workflow transition after access complete failed:', err.message || err);
+    console.error('[ACTIVE_INTERNSHIP_TRIGGER] Workflow transition failed:', err.message || err);
   }
 
   return rec;

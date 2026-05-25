@@ -171,6 +171,7 @@ export type AccessProvisionPayload = {
   candidateId: string;
   candidateName: string;
   candidateEmail?: string;
+  referralId?: string;
   systemAccess?: string[];
   notes?: string;
 };

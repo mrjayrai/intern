@@ -43,6 +43,27 @@ const generateNonWorkerId = async () => {
 };
 
 const createRequest = async (data = {}, user = {}) => {
+  // RULE 1 & 3: Strict validation - ONE ACTIVE request per candidate
+  const blockedStatuses = ['PENDING', 'APPROVED', 'COMPLETED'];
+
+  console.log(`[NON_WORKER_VALIDATION] Checking for existing requests for candidate ${data.candidateId || data.candidateEmail}`);
+
+  const existingRequest = await NonWorkerId.findOne({
+    $or: [
+      { candidateId: data.candidateId },
+      { candidateEmail: data.candidateEmail }
+    ],
+    requestStatus: { $in: blockedStatuses }
+  }).sort({ createdAt: -1 }).lean();
+
+  if (existingRequest) {
+    const errorMsg = `Cannot create Non-Worker ID request. An active request already exists with status: ${existingRequest.requestStatus}. Request ID: ${existingRequest._id}`;
+    console.error(`[NON_WORKER_VALIDATION] BLOCKED: ${errorMsg}`);
+    throw new ApiError(409, errorMsg);
+  }
+
+  console.log(`[NON_WORKER_VALIDATION] Validation passed. Creating new request for ${data.candidateName}`);
+
   const payload = {
     referralId: data.referralId,
     candidateId: data.candidateId,

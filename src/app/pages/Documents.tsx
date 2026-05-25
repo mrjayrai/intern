@@ -240,15 +240,48 @@ export function Documents() {
     }
 
     setIsSubmitting(true);
+    let signSuccess = false;
+
     try {
+      console.log('[NDA_FRONTEND_STATE] Signing NDA:', selectedNda._id);
+
       await api.nda.sign(selectedNda._id, {
         signatureName: signatureName.trim(),
         signatureAccepted: true,
         notes: actionNotes.trim() || undefined,
       });
-      await refreshAndClose('NDA signed successfully');
+
+      console.log('[NDA_FRONTEND_STATE] ✅ NDA signed successfully');
+      signSuccess = true;
+
+      // Show success immediately, then refresh
+      toast.success('NDA signed successfully');
+      resetActionState();
+      setIsSignOpen(false);
+
+      // Refresh data in background (non-blocking)
+      loadNdas().catch((refreshErr) => {
+        console.warn('[NDA_FRONTEND_STATE] Refresh after sign failed:', refreshErr);
+        // Don't show error since sign was successful
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to sign NDA');
+      console.error('[NDA_FRONTEND_STATE] ❌ Sign request failed:', err);
+      console.error('[NDA_FRONTEND_STATE] Error details:', {
+        name: err instanceof Error ? err.name : 'Unknown',
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+
+      // Check if NDA might be already signed (idempotent case)
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      if (errorMsg.includes('already signed') || errorMsg.includes('current status')) {
+        console.warn('[NDA_FRONTEND_STATE] NDA may already be signed, checking status...');
+        toast.warning('This NDA appears to be already signed. Refreshing...');
+        loadNdas().catch(() => {}); // Refresh to show updated status
+        setIsSignOpen(false);
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Unable to sign NDA');
+      }
     } finally {
       setIsSubmitting(false);
     }

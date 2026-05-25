@@ -225,7 +225,23 @@ const deleteNda = async (ndaId, actor = {}) => {
 const signNda = async (ndaId, signerInfo = {}, actor = {}) => {
   const nda = await NDA.findById(ndaId);
   if (!nda) throw new ApiError(404, 'NDA not found');
-  if (nda.status !== 'PENDING_SIGNATURE') throw new ApiError(400, 'NDA cannot be signed in its current status');
+
+  // Idempotency: If already signed by this user, return success
+  if (nda.status === 'SIGNED') {
+    const alreadySignedByUser = nda.signatureName === signerInfo.signatureName ||
+                                 (actor.email && nda.candidateEmail === actor.email && nda.signedAt);
+
+    if (alreadySignedByUser) {
+      console.log(`[NDA_SIGN_FLOW] NDA ${ndaId} already signed by ${actor.email}, returning idempotent success`);
+      return nda; // Return existing signed NDA (idempotent operation)
+    } else {
+      throw new ApiError(400, 'NDA is already signed by another user');
+    }
+  }
+
+  if (nda.status !== 'PENDING_SIGNATURE') {
+    throw new ApiError(400, `NDA cannot be signed. Current status: ${nda.status}. Required status: PENDING_SIGNATURE`);
+  }
 
   if (actor.role === ROLES.CANDIDATE) {
     const ownsNda = nda.candidateId?.toString() === actor.id?.toString() || nda.candidateEmail === actor.email;
@@ -286,19 +302,25 @@ const signNda = async (ndaId, signerInfo = {}, actor = {}) => {
     if (referral) {
       console.log(`[Workflow] NDA signed for referral ${referral._id}, notifying HR for approval`);
 
-      // Notify HR/Compliance that NDA needs approval
-      await notificationService.createNotification({
-        user: referral.recruiterId || referral.hrContactId,
-        title: 'NDA Signed - Approval Required',
-        message: `${updated.candidateName || 'Candidate'} has signed their NDA "${updated.title}". Please review and approve.`,
-        type: 'NDA_APPROVAL_REQUIRED',
-        workflowStage: referral.workflowStage,
-        metadata: { ndaId: updated._id, referralId: referral._id },
-        performedByName: actor.name,
-        performedById: actor.id,
-      });
+      // Identify notification recipient (HR/Recruiter/Mentor/Referrer)
+      const recipientId = referral.recruiterId || referral.hrContactId || referral.mentor || referral.referrer || referral.submittedBy;
 
-      console.log(`[Workflow] NDA signing notification sent for referral ${referral._id}`);
+      if (recipientId) {
+        await notificationService.createNotification({
+          user: recipientId,
+          title: 'NDA Signed - Approval Required',
+          message: `${updated.candidateName || 'Candidate'} has signed their NDA "${updated.title}". Please review and approve.`,
+          type: 'NDA_APPROVAL_REQUIRED',
+          workflowStage: referral.workflowStage,
+          metadata: { ndaId: updated._id, referralId: referral._id },
+          performedByName: actor.name,
+          performedById: actor.id,
+        });
+
+        console.log(`[Workflow] NDA signing notification sent to user ${recipientId} for referral ${referral._id}`);
+      } else {
+        console.warn(`[Workflow] No recipient found for NDA signing notification (referral ${referral._id})`);
+      }
     }
   }
 
