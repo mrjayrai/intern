@@ -55,3 +55,8 @@ exports.deleteOnboardingForm = asyncHandler(async (req, res) => {
   const result = await onboardingService.deleteJoiningFormDraft(req.params.id, req.user);
   res.status(200).json({ success: true, data: result });
 });
+
+exports.getAllOnboardingForms = asyncHandler(async (req, res) => {
+  const forms = await onboardingService.getAllJoiningForms(req.user);
+  res.status(200).json({ success: true, data: forms });
+});

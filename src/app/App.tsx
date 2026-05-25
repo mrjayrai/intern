@@ -13,6 +13,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Referrals } from './pages/Referrals';
 import { Candidates } from './pages/Candidates';
 import { Onboarding } from './pages/Onboarding';
+import { OnboardingApprovals } from './pages/OnboardingApprovals';
 import { Documents } from './pages/Documents';
 import { IDs } from './pages/IDs';
 import { Tracking } from './pages/Tracking';
@@ -42,6 +43,9 @@ export default function App() {
             <Route path="/referrals" element={<Referrals />} />
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/onboarding" element={<Onboarding />} />
+            <Route element={<RoleRoute allowedRoles={['hr', 'superAdmin']} />}>
+              <Route path="/onboarding-approvals" element={<OnboardingApprovals />} />
+            </Route>
             <Route path="/documents" element={<Documents />} />
             <Route element={<RoleRoute allowedRoles={ROUTE_PERMISSIONS['/ids']} />}>
               <Route path="/ids" element={<IDs />} />

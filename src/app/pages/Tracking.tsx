@@ -180,8 +180,8 @@ export function Tracking() {
   };
 
   const workflowStages = history?.timeline ?? [];
-  const currentStage = history?.workflowStage || workflowStages.find((stage) => stage.status === 'in_progress')?.stage || 'Unknown';
-  const selectedStatus = history?.workflowStatus || 'active';
+  const currentStage = history?.workflowStage || workflowStages.find((stage) => stage.status === 'in_progress')?.stage || selectedReferral?.workflowStage || 'Not Started';
+  const selectedStatus = history?.workflowStatus || selectedReferral?.status || 'active';
   const isLoading = loadingHistory || loadingFeed || loadingReferrals;
 
   return (

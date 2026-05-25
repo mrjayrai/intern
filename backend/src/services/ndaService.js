@@ -8,6 +8,7 @@ const emailService = require('./emailService');
 const workflowService = require('./workflowService');
 const { WORKFLOW_STAGES } = require('../constants/workflowStages');
 const { ROLES } = require('../constants/roles');
+const config = require('../config/environment');
 
 const documentTypeForFilename = (filename) => {
   const ext = path.extname(filename || '').toLowerCase();
@@ -147,7 +148,7 @@ const createNda = async (data = {}, file, actor = {}) => {
       ndaTitle: saved.title,
       status: saved.status,
       note: 'Please sign the NDA to continue onboarding.',
-      actionUrl: saved.documentUrl,
+      actionUrl: config.getNdaUrl(saved._id),
     });
   }
 
@@ -200,7 +201,7 @@ const updateNda = async (ndaId, data = {}, file, actor = {}) => {
       ndaTitle: updated.title,
       status: updated.status,
       note: 'A new NDA document has been uploaded and is ready for your review.',
-      actionUrl: updated.documentUrl,
+      actionUrl: config.getNdaUrl(updated._id),
     });
   }
 
@@ -271,12 +272,34 @@ const signNda = async (ndaId, signerInfo = {}, actor = {}) => {
       ndaTitle: updated.title,
       status: updated.status,
       note: 'Your NDA has been signed successfully.',
-      actionUrl: updated.documentUrl,
+      actionUrl: config.getDocumentsUrl(),
     });
   }
 
   if (updated.candidateId) {
     await buildCandidateNotification(updated, 'NDA signed', `The NDA "${updated.title}" has been signed.`, { ndaId: updated._id });
+  }
+
+  // Workflow progression: Notify HR/Compliance after NDA signing
+  if (updated.referral) {
+    const referral = await Referral.findById(updated.referral);
+    if (referral) {
+      console.log(`[Workflow] NDA signed for referral ${referral._id}, notifying HR for approval`);
+
+      // Notify HR/Compliance that NDA needs approval
+      await notificationService.createNotification({
+        user: referral.recruiterId || referral.hrContactId,
+        title: 'NDA Signed - Approval Required',
+        message: `${updated.candidateName || 'Candidate'} has signed their NDA "${updated.title}". Please review and approve.`,
+        type: 'NDA_APPROVAL_REQUIRED',
+        workflowStage: referral.workflowStage,
+        metadata: { ndaId: updated._id, referralId: referral._id },
+        performedByName: actor.name,
+        performedById: actor.id,
+      });
+
+      console.log(`[Workflow] NDA signing notification sent for referral ${referral._id}`);
+    }
   }
 
   return updated;
@@ -308,14 +331,35 @@ const approveNda = async (ndaId, approveInfo = {}, actor = {}) => {
       ndaTitle: updated.title,
       status: updated.status,
       note: 'Your NDA has been approved.',
-      actionUrl: updated.documentUrl,
+      actionUrl: config.getDocumentsUrl(),
     });
   }
 
+  // Workflow transition and downstream triggers after NDA approval
   if (updated.referral) {
     const referral = await Referral.findById(updated.referral);
     if (referral && workflowService.validateTransition(referral.workflowStage, WORKFLOW_STAGES.NON_WORKER_ID_PENDING)) {
       await workflowService.transitionReferralStage(referral, WORKFLOW_STAGES.NON_WORKER_ID_PENDING, actor, 'NDA approved');
+
+      console.log(`[NDA] NDA approved for referral ${referral._id}, triggering downstream processes`);
+
+      // Automatically create Non-Worker ID request after NDA approval
+      try {
+        const nonWorkerIdService = require('./nonWorkerIdService');
+        await nonWorkerIdService.createRequest(
+          {
+            referralId: referral._id,
+            candidateId: updated.candidateId,
+            candidateName: updated.candidateName,
+            candidateEmail: updated.candidateEmail,
+            notes: 'Automatically created after NDA approval',
+          },
+          actor
+        );
+        console.log(`[NDA] Non-Worker ID request created for ${updated.candidateName}`);
+      } catch (err) {
+        console.error('[NDA] Failed to create Non-Worker ID request after NDA approval:', err?.message || err);
+      }
     }
   }
 
@@ -350,7 +394,7 @@ const rejectNda = async (ndaId, rejectInfo = {}, actor = {}) => {
       ndaTitle: updated.title,
       status: updated.status,
       note: 'Your NDA has been rejected. Please contact the recruiter for next steps.',
-      actionUrl: updated.documentUrl,
+      actionUrl: config.getDocumentsUrl(),
     });
   }
 
@@ -383,7 +427,7 @@ const expireNda = async (ndaId, actor = {}) => {
       ndaTitle: updated.title,
       status: updated.status,
       note: 'Your NDA has expired.',
-      actionUrl: updated.documentUrl,
+      actionUrl: config.getDocumentsUrl(),
     });
   }
 
@@ -429,7 +473,7 @@ const expireOverdueNdas = async () => {
         ndaTitle: nda.title,
         status: nda.status,
         note: 'Your NDA has expired due to missed deadline.',
-        actionUrl: nda.documentUrl,
+        actionUrl: config.getDocumentsUrl(),
       });
     }
   }

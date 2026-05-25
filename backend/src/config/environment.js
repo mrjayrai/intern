@@ -83,6 +83,8 @@ const config = {
   getResetPasswordUrl: (token) => `${config.frontendUrl}/reset-password?token=${token}`,
   getOnboardingPortalUrl: () => `${config.frontendUrl}/onboarding`,
   getDashboardUrl: () => `${config.frontendUrl}/`,
+  getNdaUrl: (ndaId) => `${config.frontendUrl}/documents${ndaId ? `?ndaId=${ndaId}` : ''}`,
+  getDocumentsUrl: () => `${config.frontendUrl}/documents`,
 
   // Validate critical config
   validate: () => {

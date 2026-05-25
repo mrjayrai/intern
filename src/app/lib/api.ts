@@ -724,8 +724,39 @@ export const api = {
         method: 'POST',
       }),
   },
+  onboarding: {
+    list: () =>
+      apiRequest<OnboardingFormRecord[]>('/api/onboarding', {
+        method: 'GET',
+      }),
+    create: (data: FormData) =>
+      apiRequest<OnboardingFormRecord>('/api/onboarding', {
+        method: 'POST',
+        data,
+      }),
+    getById: (id: string) =>
+      apiRequest<OnboardingFormRecord>(`/api/onboarding/${id}`),
+    update: (id: string, data: FormData) =>
+      apiRequest<OnboardingFormRecord>(`/api/onboarding/${id}`, {
+        method: 'PUT',
+        data,
+      }),
+    delete: (id: string) =>
+      apiRequest<{ id: string }>(`/api/onboarding/${id}`, {
+        method: 'DELETE',
+      }),
+    submit: (id: string) =>
+      apiRequest<OnboardingFormRecord>(`/api/onboarding/${id}/submit`, {
+        method: 'POST',
+      }),
+    approve: (id: string, comment?: string) =>
+      apiRequest<OnboardingFormRecord>(`/api/onboarding/${id}/approve`, {
+        method: 'POST',
+        data: { comment },
+      }),
+  },
   createOnboardingDraft: (data: FormData) =>
-  apiRequest<OnboardingFormRecord>('/api/onboarding', {
+    apiRequest<OnboardingFormRecord>('/api/onboarding', {
       method: 'POST',
       data,
     }),

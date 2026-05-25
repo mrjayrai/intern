@@ -9,6 +9,8 @@ const ApiError = require('../utils/apiError');
 const { WORKFLOW_STAGES } = require('../constants/workflowStages');
 
 const createProvision = async (data = {}, user = {}) => {
+  console.log(`[AccessProvision] Creating access provision for candidate ${data.candidateName || data.candidateId}`);
+
   const payload = {
     referralId: data.referralId,
     candidateId: data.candidateId,
@@ -28,7 +30,9 @@ const createProvision = async (data = {}, user = {}) => {
   const rec = new AccessProvision(payload);
   await rec.save();
 
-  await auditService.createAuditLog({ action: 'CREATE', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: {} });
+  console.log(`[AccessProvision] Access provision created with ID ${rec._id}`);
+
+  await auditService.createAuditLog({ action: 'CREATE', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: { candidateId: data.candidateId } });
 
   // notify IT/admin
   try {
@@ -84,11 +88,13 @@ const startProvision = async (id, user = {}) => {
   if (!rec) throw new ApiError(404, 'AccessProvision not found');
   if (rec.provisioningStatus === 'COMPLETED') throw new ApiError(400, 'Already completed');
 
+  console.log(`[AccessProvision] Starting access provisioning for ID ${id}`);
+
   rec.provisioningStatus = 'IN_PROGRESS';
   rec.updatedBy = user.id;
   await rec.save();
 
-  await auditService.createAuditLog({ action: 'START', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: {} });
+  await auditService.createAuditLog({ action: 'START', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: { status: 'IN_PROGRESS' } });
 
   try {
     // Look up candidate email via referral if available
@@ -111,12 +117,15 @@ const startProvision = async (id, user = {}) => {
 const completeProvision = async (id, user = {}) => {
   const rec = await AccessProvision.findById(id);
   if (!rec) throw new ApiError(404, 'AccessProvision not found');
+
+  console.log(`[AccessProvision] Completing access provisioning for ID ${id}`);
+
   rec.provisioningStatus = 'COMPLETED';
   rec.completedAt = new Date();
   rec.updatedBy = user.id;
   await rec.save();
 
-  await auditService.createAuditLog({ action: 'COMPLETE', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: {} });
+  await auditService.createAuditLog({ action: 'COMPLETE', resourceType: 'AccessProvision', resourceId: rec._id, performedBy: user.name, performedById: user.id, details: { completedAt: rec.completedAt } });
 
   try {
     if (rec.referralId) {

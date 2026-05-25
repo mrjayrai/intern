@@ -14,13 +14,15 @@ import {
   BarChart3,
   LogOut,
   Sparkles,
-  Settings
+  Settings,
+  CheckSquare
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
   { name: 'Referrals', to: '/referrals', icon: UserPlus },
   { name: 'Onboarding', to: '/onboarding', icon: ClipboardCheck },
+  { name: 'Onboarding Approvals', to: '/onboarding-approvals', icon: CheckSquare },
   { name: 'NDA & Documents', to: '/documents', icon: FileText },
   { name: 'Non-Worker IDs', to: '/ids', icon: IdCard },
   { name: 'Access Management', to: '/access', icon: Key },

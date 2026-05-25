@@ -434,9 +434,26 @@ const deleteJoiningFormDraft = async (id, user) => {
   return { id };
 };
 
+const getAllJoiningForms = async (user) => {
+  let query = {};
+
+  // Candidates can only see their own forms
+  if (user.role === ROLES.CANDIDATE) {
+    query.candidateId = user.id;
+  }
+  // HR and SuperAdmin can see all forms
+
+  const forms = await JoiningForm.find(query)
+    .sort({ submittedAt: -1, createdAt: -1 })
+    .lean();
+
+  return forms;
+};
+
 module.exports = {
   createJoiningFormDraft,
   getJoiningFormById,
+  getAllJoiningForms,
   updateJoiningForm,
   submitJoiningForm,
   approveJoiningForm,
