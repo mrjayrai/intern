@@ -596,6 +596,16 @@ export const api = {
     apiRequest(`/api/referrals/${id}`, {
       method: 'DELETE',
     }),
+  approveReferral: (id: string, comment?: string) =>
+    apiRequest(`/api/referrals/${id}/approve`, {
+      method: 'POST',
+      data: { comment },
+    }),
+  rejectReferral: (id: string, reason?: string) =>
+    apiRequest(`/api/referrals/${id}/reject`, {
+      method: 'POST',
+      data: { reason },
+    }),
   parseResume: (data: FormData, onUploadProgress?: ApiRequestConfig['onUploadProgress']) =>
     apiRequest<ResumeParseResult>('/api/resumes/parse', {
       method: 'POST',

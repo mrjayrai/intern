@@ -54,3 +54,63 @@ exports.deleteReferral = asyncHandler(async (req, res) => {
   }
   res.status(200).json({ success: true, message: 'Referral deleted successfully' });
 });
+
+exports.approveReferral = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { comment } = req.body;
+
+  const referral = await referralService.getReferralById(id);
+  if (!referral) {
+    throw new ApiError(404, 'Referral not found');
+  }
+
+  // Update workflow stage to HR_REVIEW (approved)
+  const workflowService = require('../services/workflowService');
+  await workflowService.transitionReferralStage(
+    referral,
+    workflowService.WORKFLOW_STAGES.HR_REVIEW,
+    req.user,
+    comment || 'HR approved referral'
+  );
+
+  referral.status = 'approved';
+  await referral.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Referral approved successfully',
+    data: referral,
+  });
+});
+
+exports.rejectReferral = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  const referral = await referralService.getReferralById(id);
+  if (!referral) {
+    throw new ApiError(404, 'Referral not found');
+  }
+
+  // Update workflow stage - stay in current stage but mark as rejected
+  const workflowService = require('../services/workflowService');
+
+  referral.status = 'rejected';
+  await referral.save();
+
+  const auditService = require('../services/auditService');
+  await auditService.createAuditLog({
+    action: 'REJECT_REFERRAL',
+    resourceType: 'Referral',
+    resourceId: referral._id,
+    performedBy: req.user.name,
+    performedById: req.user.id,
+    details: { reason: reason || 'No reason provided' },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Referral rejected',
+    data: referral,
+  });
+});

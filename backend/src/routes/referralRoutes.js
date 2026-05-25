@@ -12,5 +12,7 @@ router.post('/', authorize([ROLES.REFERRER, ROLES.HR, ROLES.MENTOR, ROLES.SUPER_
 router.get('/:id', referralController.getReferralById);
 router.put('/:id', authorize([ROLES.HR, ROLES.MENTOR, ROLES.REFERRER, ROLES.IT, ROLES.COMPLIANCE, ROLES.SUPER_ADMIN]), uploadResume, referralController.updateReferral);
 router.delete('/:id', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), referralController.deleteReferral);
+router.post('/:id/approve', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), referralController.approveReferral);
+router.post('/:id/reject', authorize([ROLES.HR, ROLES.SUPER_ADMIN]), referralController.rejectReferral);
 
 module.exports = router;

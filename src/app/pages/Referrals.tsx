@@ -53,6 +53,12 @@ type Referral = {
   submittedDate?: string;
   createdAt?: string;
   aiScore?: number;
+  aiSummary?: string;
+  aiRecommendation?: 'STRONG_FIT' | 'GOOD_FIT' | 'MODERATE_FIT' | 'WEAK_FIT' | 'NOT_RECOMMENDED';
+  aiStrengths?: string[];
+  aiWeaknesses?: string[];
+  aiSkillsExtracted?: string[];
+  aiProcessedAt?: string;
   duplicate?: boolean;
   education?: string;
   internshipDuration?: string;
@@ -128,7 +134,26 @@ export function Referrals() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [parsingProgress, setParsingProgress] = useState(0);
   const [aiParse, setAiParse] = useState<AiParseState>(initialAiParseState);
+  const [approvingReferralId, setApprovingReferralId] = useState<string | null>(null);
+  const [rejectingReferralId, setRejectingReferralId] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Get current user from localStorage
+  const getCurrentUser = () => {
+    try {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.user || null;
+      }
+    } catch (e) {
+      console.error('Failed to parse auth data:', e);
+    }
+    return null;
+  };
+
+  const currentUser = getCurrentUser();
+  const isHR = currentUser?.role === 'hr' || currentUser?.role === 'superAdmin';
 
   const applyReferrals = (data: Referral[]) => {
     setReferrals(data);
@@ -342,6 +367,55 @@ export function Referrals() {
     }
   };
 
+  const handleApproveReferral = async (referral: Referral) => {
+    const referralId = getReferralId(referral);
+    if (!referralId) {
+      setStatusMessage('Unable to approve referral without an ID');
+      return;
+    }
+
+    const candidateName = referral.name || referral.candidateName || 'this candidate';
+    if (!window.confirm(`Approve ${candidateName} for internship?`)) return;
+
+    setApprovingReferralId(referralId);
+
+    try {
+      await api.approveReferral(referralId, 'HR approved candidate');
+      const referralsData = await api.referrals();
+      applyReferrals(referralsData);
+      setStatusMessage(`${candidateName} approved successfully`);
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : 'Unable to approve referral');
+    } finally {
+      setApprovingReferralId(null);
+    }
+  };
+
+  const handleRejectReferral = async (referral: Referral) => {
+    const referralId = getReferralId(referral);
+    if (!referralId) {
+      setStatusMessage('Unable to reject referral without an ID');
+      return;
+    }
+
+    const candidateName = referral.name || referral.candidateName || 'this candidate';
+    const reason = window.prompt(`Reject ${candidateName}? Please provide a reason:`);
+    if (reason === null) return; // User cancelled
+
+    setRejectingReferralId(referralId);
+
+    try {
+      await api.rejectReferral(referralId, reason || 'No reason provided');
+      const referralsData = await api.referrals();
+      applyReferrals(referralsData);
+      setStatusMessage(`${candidateName} rejected`);
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : 'Unable to reject referral');
+    } finally {
+      setRejectingReferralId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 p-8">
       <div className="flex items-center justify-between">
@@ -402,7 +476,8 @@ export function Referrals() {
                   const submittedBy = referral.submittedBy || referral.referrer || 'Unknown';
                   const submittedDate = referral.submittedDate || referral.createdAt || '-';
                   const department = referral.department || referral.location || '-';
-                  const score = referral.aiScore ?? 0;
+                  const score = referral.aiScore;
+                  const hasAiScore = typeof score === 'number' && score >= 0;
 
                   return (
                     <tr key={referral.id || referral._id || email} className="text-sm">
@@ -473,21 +548,38 @@ export function Referrals() {
                         </Badge>
                       </td>
                       <td className="py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 w-20 overflow-hidden rounded-full bg-gray-200">
-                            <div
-                              className={`h-full ${
-                                score >= 90
-                                  ? 'bg-emerald-500'
-                                  : score >= 75
-                                  ? 'bg-blue-500'
-                                  : 'bg-amber-500'
+                        {hasAiScore ? (
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-20 overflow-hidden rounded-full bg-gray-200">
+                              <div
+                                className={`h-full transition-all ${
+                                  score! >= 80
+                                    ? 'bg-green-500'
+                                    : score! >= 50
+                                    ? 'bg-yellow-500'
+                                    : 'bg-red-500'
+                                }`}
+                                style={{ width: `${score}%` }}
+                              />
+                            </div>
+                            <span
+                              className={`text-xs font-semibold ${
+                                score! >= 80
+                                  ? 'text-green-600'
+                                  : score! >= 50
+                                  ? 'text-yellow-600'
+                                  : 'text-red-600'
                               }`}
-                              style={{ width: `${score}%` }}
-                            />
+                            >
+                              {score}
+                            </span>
                           </div>
-                          <span className="text-xs font-medium">{score}%</span>
-                        </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="h-3.5 w-3.5 text-purple-500 animate-pulse" />
+                            <span className="text-xs text-muted-foreground">AI analysis pending</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-4 text-muted-foreground">{submittedDate}</td>
                       <td className="py-4">
@@ -495,6 +587,37 @@ export function Referrals() {
                           <Button variant="ghost" size="sm" title="View candidate profile" onClick={() => openCandidateProfile(referral)}>
                             <Eye className="h-4 w-4" />
                           </Button>
+                          {isHR && referral.workflowStage === 'HR_REVIEW_PENDING' && (
+                            <>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                title="Approve referral"
+                                className="bg-green-600 hover:bg-green-700"
+                                disabled={approvingReferralId === getReferralId(referral)}
+                                onClick={() => void handleApproveReferral(referral)}
+                              >
+                                {approvingReferralId === getReferralId(referral) ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                title="Reject referral"
+                                disabled={rejectingReferralId === getReferralId(referral)}
+                                onClick={() => void handleRejectReferral(referral)}
+                              >
+                                {rejectingReferralId === getReferralId(referral) ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <XCircle className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </>
+                          )}
                           <Button variant="ghost" size="sm" title="Edit referral" onClick={() => openEditReferral(referral)}>
                             <Edit className="h-4 w-4" />
                           </Button>

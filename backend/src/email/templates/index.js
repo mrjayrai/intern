@@ -10,6 +10,7 @@ const nonWorkerIdRejected = require('./nonWorkerIdRejected');
 const accessProvisioningStarted = require('./accessProvisioningStarted');
 const accessProvisioningCompleted = require('./accessProvisioningCompleted');
 const onboardingUpdate = require('./onboardingUpdate');
+const onboardingInitiation = require('./onboardingInitiation');
 const passwordReset = require('./passwordReset');
 const slaWarning = require('./slaWarning');
 
@@ -26,6 +27,7 @@ module.exports = {
   accessProvisioningStarted,
   accessProvisioningCompleted,
   onboardingUpdate,
+  onboardingInitiation,
   passwordReset,
   slaWarning,
 };

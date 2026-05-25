@@ -17,6 +17,13 @@ const ReferralSchema = new mongoose.Schema(
     location: { type: String, trim: true },
     workflowStage: { type: String, trim: true, enum: Object.values(WORKFLOW_STAGES), default: WORKFLOW_STAGES.REFERRED, index: true },
     slaDeadline: { type: Date },
+    aiScore: { type: Number, min: 0, max: 100 },
+    aiSummary: { type: String },
+    aiRecommendation: { type: String, enum: ['STRONG_FIT', 'GOOD_FIT', 'MODERATE_FIT', 'WEAK_FIT', 'NOT_RECOMMENDED'] },
+    aiStrengths: { type: [String], default: [] },
+    aiWeaknesses: { type: [String], default: [] },
+    aiSkillsExtracted: { type: [String], default: [] },
+    aiProcessedAt: { type: Date },
   },
   { timestamps: true }
 );

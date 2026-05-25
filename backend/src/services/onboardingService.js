@@ -4,6 +4,8 @@ const Referral = require('../models/Referral');
 const auditService = require('./auditService');
 const workflowService = require('./workflowService');
 const emailService = require('./emailService');
+const { createOfferLetterPdf } = require('../utils/pdfGenerator');
+const path = require('path');
 const { WORKFLOW_STAGES } = require('../constants/workflowStages');
 const { ROLES } = require('../constants/roles');
 
@@ -315,16 +317,82 @@ const approveJoiningForm = async (id, user, approvalComment = '') => {
     details: { approved: true, comment: approvalComment },
   });
 
+  // Generate offer letter and send onboarding initiation email
   try {
+    const referral = form.referralId ? await Referral.findById(form.referralId) : null;
+    const mentorName = referral?.mentor ? (await require('../models/User').findById(referral.mentor))?.name : 'Your mentor';
+
+    const offerLetterData = {
+      candidateName: form.candidateName,
+      candidateEmail: form.candidateEmail,
+      role: 'Intern',
+      department: referral?.projectOverview ? 'Engineering' : 'General',
+      mentor: mentorName || 'To be assigned',
+      mentorEmail: '',
+      duration: referral?.internshipDuration || '3 months',
+      joiningDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      stipend: '',
+      location: referral?.location || 'Remote',
+      referenceId: `OL-${form._id.toString().slice(-8).toUpperCase()}`,
+      issuedByName: user.name || 'Intern Flow HR Team',
+    };
+
+    const offerLetterPath = await createOfferLetterPdf(offerLetterData);
+    const resolvedOfferLetterPath = path.resolve(path.join(__dirname, '..', offerLetterPath));
+
+    console.log(`Offer letter generated: ${offerLetterPath}`);
+
+    await auditService.createAuditLog({
+      action: 'OFFER_LETTER_GENERATED',
+      resourceType: 'JoiningForm',
+      resourceId: form._id,
+      performedBy: user.name,
+      performedById: user.id,
+      details: { offerLetterPath, candidateName: form.candidateName },
+    });
+
     if (form.candidateEmail) {
-      await emailService.enqueueEmail(form.candidateEmail, 'onboardingUpdate', {
-        name: form.candidateName,
-        status: 'HR_APPROVED',
-        approvedBy: user.name,
+      const onboardingPortalLink = `${process.env.APP_URL || 'http://localhost:5173'}/onboarding`;
+
+      await emailService.enqueueEmail(
+        form.candidateEmail,
+        'onboardingInitiation',
+        {
+          name: form.candidateName,
+          candidateName: form.candidateName,
+          role: offerLetterData.role,
+          department: offerLetterData.department,
+          mentor: offerLetterData.mentor,
+          joiningDate: offerLetterData.joiningDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+          onboardingPortalLink,
+          hrContactEmail: 'support@internflow.io',
+          offerLetterAttached: true,
+        },
+        {
+          attachments: [
+            {
+              filename: `Intern-Flow-Offer-Letter-${offerLetterData.referenceId}.pdf`,
+              path: resolvedOfferLetterPath,
+              contentType: 'application/pdf',
+            },
+          ],
+        }
+      );
+
+      console.log(`Onboarding initiation email queued for ${form.candidateEmail}`);
+
+      await auditService.createAuditLog({
+        action: 'ONBOARDING_EMAIL_SENT',
+        resourceType: 'JoiningForm',
+        resourceId: form._id,
+        performedBy: user.name,
+        performedById: user.id,
+        details: { candidateEmail: form.candidateEmail, offerLetterAttached: true },
       });
     }
   } catch (err) {
-    console.error('Failed to send onboarding approved email', err.message || err);
+    console.error('Failed to generate offer letter or send onboarding email:', err.message || err);
+    // Don't fail the entire approval if email/PDF generation fails
   }
 
   // trigger non-worker ID workflow creation

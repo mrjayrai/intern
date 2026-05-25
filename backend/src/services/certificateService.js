@@ -64,6 +64,8 @@ const issueCertificate = async (payload, user) => {
     completionDate: certificateData.completionDate,
     issuedByName,
     verificationId: certificateData.verificationId,
+    department: certificateData.department || 'General',
+    role: 'Intern',
   });
 
   const certificate = await Certificate.create(certificateData);

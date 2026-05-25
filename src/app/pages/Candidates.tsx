@@ -39,6 +39,12 @@ type ReferralCandidateState = {
     createdAt?: string;
     submittedDate?: string;
     aiScore?: number;
+    aiSummary?: string;
+    aiRecommendation?: 'STRONG_FIT' | 'GOOD_FIT' | 'MODERATE_FIT' | 'WEAK_FIT' | 'NOT_RECOMMENDED';
+    aiStrengths?: string[];
+    aiWeaknesses?: string[];
+    aiSkillsExtracted?: string[];
+    aiProcessedAt?: string;
   };
 };
 
