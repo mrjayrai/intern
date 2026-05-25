@@ -33,13 +33,24 @@ const transitionReferralStage = async (referral, nextStage, actor = {}, note = '
   }
 
   const currentStage = referral.workflowStage;
+
+  // Prevent duplicate transitions (idempotency guard)
+  if (currentStage === nextStage) {
+    console.log(`[Workflow] Duplicate transition prevented: ${referral._id} already in stage ${nextStage}`);
+    return referral;
+  }
+
   if (!isValidStage(nextStage)) {
+    console.error(`[Workflow] Invalid workflow stage attempted: ${nextStage}`);
     throw new ApiError(400, 'Invalid workflow stage');
   }
 
   if (!validateTransition(currentStage, nextStage)) {
+    console.error(`[Workflow] Invalid transition: ${currentStage} → ${nextStage} for referral ${referral._id}`);
     throw new ApiError(400, `Invalid workflow transition from ${currentStage} to ${nextStage}`);
   }
+
+  console.log(`[Workflow] Transition started: ${referral._id} | ${currentStage} → ${nextStage} | Actor: ${actor.name || 'System'}`);
 
   // Enforce NDA-signed requirement for stages that should not be reachable before NDA is signed
   const requireNdaStages = [WORKFLOW_STAGES.READY_TO_START, WORKFLOW_STAGES.ACTIVE];
@@ -55,6 +66,8 @@ const transitionReferralStage = async (referral, nextStage, actor = {}, note = '
   referral.slaDeadline = slaDeadline;
 
   await referral.save();
+
+  console.log(`[Workflow] Transition completed: ${referral._id} | ${currentStage} → ${nextStage}`);
 
   // record transition with the tracking service (computes durations, SLA checks, notifications, audits)
   try {

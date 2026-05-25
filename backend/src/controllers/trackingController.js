@@ -2,10 +2,20 @@ const trackingService = require('../services/trackingService');
 const activityFeedService = require('../services/activityFeedService');
 const ExtensionRequest = require('../models/ExtensionRequest');
 const AuditService = require('../services/auditService');
+const ApiError = require('../utils/apiError');
+const { ROLES } = require('../constants/roles');
 
 const getTrackingByCandidate = async (req, res, next) => {
   try {
     const { candidateId } = req.params;
+    const user = req.user;
+
+    // Ownership validation: candidates can only see their own data
+    if (user.role === ROLES.CANDIDATE && user.id.toString() !== candidateId.toString()) {
+      console.warn(`[Security] Unauthorized tracking access attempt by ${user.email} for candidate ${candidateId}`);
+      throw new ApiError(403, 'Forbidden: Cannot access tracking data for other candidates');
+    }
+
     // fetch history entries across referrals/onboarding for a candidate
     const feed = await activityFeedService.buildActivityFeed({ candidateId });
     res.json({ success: true, data: feed });

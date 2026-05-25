@@ -54,6 +54,18 @@ const issueCertificate = async (payload, user) => {
     throw new ApiError(400, 'Validation failed', errors);
   }
 
+  // Idempotency guard: Check if certificate already exists for this referral
+  if (payload.referralId) {
+    const existingCertificate = await Certificate.findOne({
+      referralId: payload.referralId,
+      candidateEmail: payload.candidateEmail
+    });
+    if (existingCertificate) {
+      console.log('[Certificate] Certificate already exists for referral:', payload.referralId);
+      throw new ApiError(400, 'Certificate already issued for this referral');
+    }
+  }
+
   const certificateData = buildCertificateData(payload, user);
   const issuedByName = user.name || user.email || 'Intern Flow Team';
 
@@ -70,7 +82,9 @@ const issueCertificate = async (payload, user) => {
 
   const certificate = await Certificate.create(certificateData);
 
+  // Send certificate email (queued for reliable delivery)
   if (certificate.candidateEmail) {
+    console.log(`[Certificate] Queueing certificate email for ${certificate.candidateEmail}`);
     await emailService.enqueueEmail(
       certificate.candidateEmail,
       'certificate',
@@ -89,29 +103,11 @@ const issueCertificate = async (payload, user) => {
         ],
       }
     );
-    emailService.processQueue(10).catch(() => {});
-  }
-
-  
-  if (certificate.candidateEmail) {
-    await emailService.sendTemplate(
-      certificate.candidateEmail,
-      'certificate',
-      {
-        name: certificate.candidate,
-        certificateLink: buildCertificateLink(certificate._id),
-        verificationId: certificate.verificationId,
-      },
-      {
-        attachments: [
-          {
-            filename: `InternFlow-Certificate-${certificate.verificationId}.pdf`,
-            path: resolveGeneratedPdfPath(certificate.pdfPath),
-            contentType: 'application/pdf',
-          },
-        ],
-      }
-    );
+    // Trigger queue processing asynchronously (non-blocking)
+    emailService.processQueue(10).catch((err) => {
+      console.error('[Certificate] Queue processing error:', err?.message || err);
+    });
+    console.log(`[Certificate] Certificate email queued successfully`);
   }
 
   if (payload.referralId) {

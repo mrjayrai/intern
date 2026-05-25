@@ -97,6 +97,31 @@ const getMentorName = async (referral) => {
 };
 
 const createOnboardingAndOffer = async (referral, actor) => {
+  // Idempotency guard: Check if onboarding already exists for this referral
+  const JoiningForm = require('../models/JoiningForm');
+  const existingOnboarding = await JoiningForm.findOne({ referralId: referral._id });
+  if (existingOnboarding) {
+    console.log('[createOnboardingAndOffer] Onboarding already exists, reusing:', existingOnboarding._id);
+    // Still generate a new offer letter if needed
+    const mentorName = await getMentorName(referral);
+    const offerLetterData = {
+      candidateName: referral.candidateName,
+      candidateEmail: referral.candidateEmail,
+      role: buildCandidateRole(referral),
+      department: getReferralDepartment(referral),
+      mentor: mentorName,
+      mentorEmail: '',
+      duration: referral.internshipDuration || 'TBD',
+      joiningDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      stipend: '',
+      location: referral.location || 'Remote',
+      referenceId: `RF-${String(referral._id).slice(-8).toUpperCase()}`,
+      issuedByName: actor.name || 'Intern Flow HR Team',
+    };
+    const offerLetterPath = await createOfferLetterPdf(offerLetterData);
+    return { onboarding: existingOnboarding, offerLetterPath };
+  }
+
   const onboarding = await onboardingService.createJoiningFormDraft(
     {
       referralId: referral._id,
@@ -240,7 +265,7 @@ const approveReferral = async (id, actor = {}, comment = '') => {
     throw new ApiError(400, 'Referral is not ready for HR approval');
   }
 
-  console.log(`[HR Approval] clicked by ${actor.email || actor.name || 'system'} for referral ${id}`);
+  console.log(`[HR Approval] Onboarding chain started for referral ${id} by ${actor.email || actor.name || 'system'}`);
 
   // Transition to HR_APPROVED
   await workflowService.transitionReferralStage(
@@ -262,7 +287,9 @@ const approveReferral = async (id, actor = {}, comment = '') => {
   await referral.save();
 
   // Create onboarding record and offer letter
+  console.log('[HR Approval] Creating onboarding record and offer letter');
   const { onboarding, offerLetterPath } = await createOnboardingAndOffer(referral, actor);
+  console.log('[HR Approval] Onboarding record created:', onboarding._id);
 
   // Create onboarding invitation
   console.log('[HR Approval] Creating onboarding invitation for', referral.candidateEmail);
@@ -314,11 +341,21 @@ const approveReferral = async (id, actor = {}, comment = '') => {
         activationLink,
         offerLetterAttached: !!offerLetterPath,
       },
-      resolvedOfferLetterPath ? [resolvedOfferLetterPath] : []
+      {
+        attachments: resolvedOfferLetterPath ? [
+          {
+            filename: `Intern-Flow-Offer-Letter-${String(referral._id).slice(-8).toUpperCase()}.pdf`,
+            path: resolvedOfferLetterPath,
+            contentType: 'application/pdf',
+          }
+        ] : []
+      }
     );
 
     console.log('[HR Approval] Onboarding invitation email queued successfully');
+    console.log('[HR Approval] Onboarding chain completed successfully');
   } catch (inviteErr) {
+    console.error('[HR Approval] Onboarding chain failed:', inviteErr?.message || inviteErr);
     console.error('[HR Approval] Failed to create invitation or send email:', inviteErr?.message || inviteErr);
     // Don't fail the entire approval if invitation fails
   }

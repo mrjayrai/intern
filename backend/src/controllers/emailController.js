@@ -4,20 +4,22 @@ const ApiError = require('../utils/apiError');
 
 exports.listLogs = async (req, res, next) => {
   try {
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
-    const skip = (page - 1) * limit;
-    const q = {};
-    if (req.query.status) q.status = req.query.status;
-    if (req.query.to) q.to = req.query.to;
+    const filters = {
+      status: req.query.status,
+      to: req.query.to,
+      template: req.query.template
+    };
+    const options = {
+      page: req.query.page,
+      limit: req.query.limit
+    };
 
-    const [rows, total] = await Promise.all([
-      EmailLog.find(q).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      EmailLog.countDocuments(q),
-    ]);
+    const result = await emailService.getEmailLogs(filters, options);
+    console.log(`[EmailQueue] Email logs requested | Page: ${result.meta.page} | Total: ${result.meta.total}`);
 
-    return res.status(200).json({ success: true, data: { rows, total, page, limit } });
+    return res.status(200).json({ success: true, ...result });
   } catch (err) {
+    console.error('[EmailQueue] Failed to list email logs:', err?.message || err);
     return next(new ApiError(500, 'Failed to list email logs'));
   }
 };
@@ -43,17 +45,14 @@ exports.retryLog = async (req, res, next) => {
 
 exports.queueStatus = async (req, res, next) => {
   try {
-    const [queued, sending, sent, failed] = await Promise.all([
-      EmailLog.countDocuments({ status: 'queued' }),
-      EmailLog.countDocuments({ status: 'sending' }),
-      EmailLog.countDocuments({ status: 'sent' }),
-      EmailLog.countDocuments({ status: 'failed' }),
-    ]);
+    const status = await emailService.getQueueStatus();
+    console.log('[EmailQueue] Status requested:', JSON.stringify(status.queue));
     return res.status(200).json({
       success: true,
-      data: { queued, sending, sent, failed, total: queued + sending + sent + failed },
+      data: status,
     });
   } catch (err) {
+    console.error('[EmailQueue] Failed to get queue status:', err?.message || err);
     return next(new ApiError(500, 'Failed to get queue status'));
   }
 };
