@@ -803,4 +803,54 @@ export const api = {
         params,
       }),
   },
+  onboardingInvites: {
+    validateToken: (token: string) =>
+      apiRequest<{
+        email: string;
+        candidateName: string;
+        department: string;
+        role: string;
+        internshipDuration: string;
+        location: string;
+        expiresAt: string;
+        onboarding: {
+          mentor: string;
+          project: string;
+          startDate: string;
+        };
+      }>(`/api/onboarding-invites/validate/${token}`, {
+        auth: false,
+      }),
+    acceptInvite: (data: { token: string; password: string; additionalData?: ApiRecord }) =>
+      apiRequest<{
+        user: {
+          id: string;
+          name: string;
+          email: string;
+          role: UserRole;
+          department: string;
+        };
+        referral: {
+          id: string;
+          workflowStage: string;
+        };
+        onboarding: {
+          id: string;
+          status: string;
+        };
+      }>('/api/onboarding-invites/accept', {
+        auth: false,
+        method: 'POST',
+        data,
+      }),
+    checkPendingInvite: (email: string) =>
+      apiRequest<{
+        hasPendingInvite: boolean;
+        message: string;
+      }>('/api/onboarding-invites/check-email', {
+        auth: false,
+        method: 'POST',
+        data: { email },
+      }),
+  },
 };

@@ -8,6 +8,7 @@ import { initializeAuthState } from './lib/api';
 import { ROUTE_PERMISSIONS } from './config/rbac';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import OnboardingAccept from './pages/OnboardingAccept';
 import { Dashboard } from './pages/Dashboard';
 import { Referrals } from './pages/Referrals';
 import { Candidates } from './pages/Candidates';
@@ -32,6 +33,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/onboarding/accept" element={<OnboardingAccept />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
             <Route element={<RoleRoute allowedRoles={ROUTE_PERMISSIONS['/']} redirectTo="/onboarding" />}>

@@ -88,11 +88,27 @@ export function Register() {
 
     setIsSubmitting(true);
     try {
+      // Check if this email has a pending onboarding invitation
+      console.log('[Register] Checking for pending invite:', email.trim());
+      const inviteCheck = await api.onboardingInvites.checkPendingInvite(email.trim());
+
+      if (inviteCheck.data.hasPendingInvite) {
+        console.log('[Register] Email has pending invite, blocking registration');
+        toast.error(
+          'This email has a pending onboarding invitation. Please check your email and use the activation link provided.',
+          { duration: 6000 }
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      console.log('[Register] No pending invite, proceeding with registration');
       const session = await api.register({ name: name.trim(), email: email.trim(), password, role });
       setSession(session.accessToken, session.user);
       toast.success('Account created successfully! Welcome to Intern Flow.');
       navigate('/', { replace: true });
     } catch (err) {
+      console.error('[Register] Error:', err);
       toast.error(err instanceof Error ? err.message : 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -248,6 +264,13 @@ export function Register() {
                 {isSubmitting ? 'Creating account...' : 'Create account'}
               </Button>
             </form>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <p className="text-xs text-blue-800">
+                <strong>Approved candidate?</strong> If you received an onboarding invitation email from HR,
+                please use the activation link provided in your email instead of registering here.
+              </p>
+            </div>
 
             <p className="text-center text-sm text-gray-600">
               Already have an account?{' '}

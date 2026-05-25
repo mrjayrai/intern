@@ -5,10 +5,12 @@ const workflowService = require('../services/workflowService');
 const notificationService = require('../services/notificationService');
 const emailService = require('../services/emailService');
 const onboardingService = require('../services/onboardingService');
+const onboardingInviteService = require('../services/onboardingInviteService');
 const aiScoringService = require('../services/aiScoringService');
 const fs = require('fs').promises;
 const path = require('path');
 const { createOfferLetterPdf } = require('../utils/pdfGenerator');
+const config = require('../config/environment');
 
 const createReferral = async (data, actor = {}) => {
   const referralData = { ...data };
@@ -143,8 +145,8 @@ const createOnboardingAndOffer = async (referral, actor) => {
         department: offerLetterData.department,
         mentor: offerLetterData.mentor,
         joiningDate: offerLetterData.joiningDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-        onboardingPortalLink: `${process.env.APP_URL || 'http://localhost:5173'}/onboarding`,
-        hrContactEmail: process.env.HR_CONTACT_EMAIL || 'support@internflow.io',
+        onboardingPortalLink: config.getOnboardingPortalUrl(),
+        hrContactEmail: config.hrContact.email,
         offerLetterAttached: true,
       },
       {
@@ -240,6 +242,7 @@ const approveReferral = async (id, actor = {}, comment = '') => {
 
   console.log(`[HR Approval] clicked by ${actor.email || actor.name || 'system'} for referral ${id}`);
 
+  // Transition to HR_APPROVED
   await workflowService.transitionReferralStage(
     referral,
     workflowService.WORKFLOW_STAGES.HR_APPROVED,
@@ -247,6 +250,7 @@ const approveReferral = async (id, actor = {}, comment = '') => {
     comment || 'HR approved referral'
   );
 
+  // Transition to ONBOARDING_PENDING
   await workflowService.transitionReferralStage(
     referral,
     workflowService.WORKFLOW_STAGES.ONBOARDING_PENDING,
@@ -257,25 +261,111 @@ const approveReferral = async (id, actor = {}, comment = '') => {
   referral.status = 'APPROVED';
   await referral.save();
 
+  // Create onboarding record and offer letter
   const { onboarding, offerLetterPath } = await createOnboardingAndOffer(referral, actor);
 
+  // Create onboarding invitation
+  console.log('[HR Approval] Creating onboarding invitation for', referral.candidateEmail);
+  let invite = null;
+  let activationLink = '';
+
+  try {
+    invite = await onboardingInviteService.createOnboardingInvite({
+      email: referral.candidateEmail,
+      referralId: referral._id,
+      onboardingId: onboarding._id,
+      createdBy: actor.id,
+      role: 'CANDIDATE',
+      expiryHours: 72, // 3 days
+    });
+
+    // Transition to ONBOARDING_INVITED
+    await workflowService.transitionReferralStage(
+      referral,
+      workflowService.WORKFLOW_STAGES.ONBOARDING_INVITED,
+      actor,
+      'Onboarding invitation sent to candidate'
+    );
+
+    // Generate activation link using config helper
+    activationLink = config.getActivationUrl(invite.token);
+
+    console.log('[HR Approval] Invitation created, sending email with activation link');
+    console.log('[HR Approval] Activation link:', activationLink);
+
+    // Send onboarding invitation email with offer letter
+    const mentorName = await getMentorName(referral);
+
+    // Resolve offer letter path for attachment
+    const resolvedOfferLetterPath = offerLetterPath
+      ? path.resolve(path.join(__dirname, '..', offerLetterPath))
+      : null;
+
+    await emailService.enqueueEmail(
+      referral.candidateEmail,
+      'onboardingInvitation',
+      {
+        candidateName: referral.candidateName,
+        department: getReferralDepartment(referral),
+        role: 'CANDIDATE',
+        internshipDuration: referral.internshipDuration || 'TBD',
+        mentor: mentorName,
+        startDate: onboarding.startDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        activationLink,
+        offerLetterAttached: !!offerLetterPath,
+      },
+      resolvedOfferLetterPath ? [resolvedOfferLetterPath] : []
+    );
+
+    console.log('[HR Approval] Onboarding invitation email queued successfully');
+  } catch (inviteErr) {
+    console.error('[HR Approval] Failed to create invitation or send email:', inviteErr?.message || inviteErr);
+    // Don't fail the entire approval if invitation fails
+  }
+
+  // Always log activation link for local development/testing
+  if (activationLink) {
+    console.log('\n╔════════════════════════════════════════════════════════════════╗');
+    console.log('║  🚀 ACTIVATION LINK (Copy-paste to browser)                   ║');
+    console.log('╠════════════════════════════════════════════════════════════════╣');
+    console.log('║  ', activationLink.padEnd(58), '║');
+    console.log('╠════════════════════════════════════════════════════════════════╣');
+    console.log('║  Candidate:', referral.candidateEmail.padEnd(47), '║');
+    console.log('║  Expires: 72 hours from approval                               ║');
+    console.log('╚════════════════════════════════════════════════════════════════╝\n');
+  }
+
+  // Create audit log
   await auditService.createAuditLog({
     action: 'APPROVE_REFERRAL',
     resourceType: 'Referral',
     resourceId: referral._id,
     performedBy: actor.name,
     performedById: actor.id,
-    details: { comment, candidateName: referral.candidateName, onboardingId: onboarding?._id, offerLetterPath },
+    details: {
+      comment,
+      candidateName: referral.candidateName,
+      onboardingId: onboarding?._id,
+      offerLetterPath,
+      inviteId: invite?._id,
+      activationLink,
+    },
   });
 
+  // Send internal notification
   try {
     await notificationService.createNotification({
       user: referral.referrer || actor.id,
       title: 'Referral approved',
-      message: `${referral.candidateName} was approved and moved to onboarding.`,
+      message: `${referral.candidateName} was approved and invitation sent.`,
       type: 'WORKFLOW',
-      workflowStage: workflowService.WORKFLOW_STAGES.ONBOARDING_PENDING,
-      metadata: { referralId: referral._id, onboardingId: onboarding?._id, offerLetterPath },
+      workflowStage: workflowService.WORKFLOW_STAGES.ONBOARDING_INVITED,
+      metadata: {
+        referralId: referral._id,
+        onboardingId: onboarding?._id,
+        offerLetterPath,
+        inviteId: invite?._id,
+      },
       performedByName: actor.name || 'System',
       performedById: actor.id,
     });
@@ -283,7 +373,7 @@ const approveReferral = async (id, actor = {}, comment = '') => {
     console.error('[HR Approval] notification failed:', err?.message || err);
   }
 
-  return { referral, onboarding, offerLetterPath };
+  return { referral, onboarding, offerLetterPath, invite, activationLink };
 };
 
 const rejectReferral = async (id, actor = {}, reason = '') => {

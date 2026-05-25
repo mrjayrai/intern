@@ -15,17 +15,19 @@ const resumeRoutes = require('./routes/resumeRoutes');
 const certificateRoutes = require('./routes/certificateRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const onboardingRoutes = require('./routes/onboardingRoutes');
+const onboardingInviteRoutes = require('./routes/onboardingInviteRoutes');
 const nonWorkerIdRoutes = require('./routes/nonWorkerIdRoutes');
 const accessProvisionRoutes = require('./routes/accessProvisionRoutes');
 const trackingRoutes = require('./routes/trackingRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 const constants = require('./config/constants');
+const config = require('./config/environment');
 
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
+app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(compression());
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
@@ -57,6 +59,7 @@ app.use('/api/resumes', resumeRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/onboarding-invites', onboardingInviteRoutes);
 app.use('/api/ids', nonWorkerIdRoutes);
 app.use('/api/access', accessProvisionRoutes);
 app.use('/api/tracking', trackingRoutes);

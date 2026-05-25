@@ -11,6 +11,7 @@ const accessProvisioningStarted = require('./accessProvisioningStarted');
 const accessProvisioningCompleted = require('./accessProvisioningCompleted');
 const onboardingUpdate = require('./onboardingUpdate');
 const onboardingInitiation = require('./onboardingInitiation');
+const onboardingInvitation = require('./onboardingInvitation');
 const passwordReset = require('./passwordReset');
 const slaWarning = require('./slaWarning');
 
@@ -28,6 +29,7 @@ module.exports = {
   accessProvisioningCompleted,
   onboardingUpdate,
   onboardingInitiation,
+  onboardingInvitation,
   passwordReset,
   slaWarning,
 };
