@@ -18,7 +18,7 @@ import {
   User,
   Mail,
 } from 'lucide-react';
-import { Alert } from '../components/ui/Alert';
+import { Alert } from '../components/ui/alert';
 
 type InviteData = {
   email: string;
