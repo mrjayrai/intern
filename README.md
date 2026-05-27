@@ -1718,31 +1718,31 @@ VITE_API_BASE_URL=http://localhost:5000
 ## 📸 Screenshots
 
 ### Dashboard Overview
-![Dashboard Screenshot Placeholder]
+![alt text](image.png)
 *Role-based dashboard showing key metrics, pending approvals, and SLA alerts*
 
 ### AI-Powered Resume Analysis
-![Resume Analysis Screenshot Placeholder]
+![alt text](image-1.png)
 *AI resume parsing with skill extraction, scoring, and candidate summary*
 
 ### Candidate Pipeline
-![Candidate Pipeline Screenshot Placeholder]
+!![alt text](image-2.png)
 *End-to-end candidate tracking from referral to active internship*
 
 ### Onboarding Portal
-![Onboarding Portal Screenshot Placeholder]
+![alt text](image-3.png)
 *Candidate self-service portal for document upload and NDA signing*
 
 ### Access Provisioning Workflow
-![Access Provisioning Screenshot Placeholder]
+![alt text](image-4.png)
 *IT dashboard for managing access requests and non-worker ID generation*
 
 ### SLA Monitoring Dashboard
-![SLA Dashboard Screenshot Placeholder]
+![alt text](image-5.png)
 *Real-time SLA tracking with automated alerts and escalation*
 
 ### Audit Logs & Compliance
-![Audit Logs Screenshot Placeholder]
+![alt text](image-6.png)
 *Comprehensive audit trail for compliance and security reviews*
 
 ---
@@ -2088,9 +2088,8 @@ await redis.setex('dashboard:metrics', 300, JSON.stringify(metrics)); // 5min TT
 
 | Name | Role | GitHub | LinkedIn |
 |------|------|--------|----------|
-| **Your Name** | Full-Stack Developer & Architect | [@your-username](https://github.com/your-username) | [LinkedIn](https://linkedin.com/in/your-profile) |
-| **Team Member 2** | Frontend Developer | [@username2](https://github.com/username2) | [LinkedIn](https://linkedin.com/in/profile2) |
-| **Team Member 3** | Backend Developer | [@username3](https://github.com/username3) | [LinkedIn](https://linkedin.com/in/profile3) |
+| **Rai Pritesh** | Full-Stack Developer & Architect | [@Rai-Pritesh](https://github.com/mrjayrai/) | [LinkedIn](https://www.linkedin.com/in/pritesh-rai-a5b12a201/) |
+
 
 ### Acknowledgments
 
